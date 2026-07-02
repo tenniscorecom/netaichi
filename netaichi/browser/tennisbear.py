@@ -135,12 +135,63 @@ class TennisBear(ChromeBrowser):
             )
             return True
 
-        # 「招待せずにイベントを作成」で確定
+        # 「招待せずにイベントを作成」→ 確認ページ(/event/confirm)へ
         if not self._click_button_by_text("招待せずにイベントを作成"):
+            return False
+        self._wait_render()
+
+        # 確認ページの「作成する」で最終確定
+        if not self._click_button_by_text("作成する"):
+            self.logger.error("確認ページの「作成する」ボタンが見つかりませんでした")
             return False
         self._wait_render()
         self.logger.info(f"イベントを作成しました: {court_name} {start:%m/%d %H:%M}-{end:%H:%M}")
         return True
+
+    def delete_event(self, event_id: str, comment: str = "都合により削除させていただきます。") -> bool:
+        """作成済みイベントを削除する（管理メニュー→イベントの削除→確認）"""
+        self.go_page(f"{self.BASE_URL}/event/{event_id}/info")
+        self._wait_render()
+        if not self._click_button_by_text("管理メニュー"):
+            return False
+        time.sleep(1.5)
+
+        # 「イベントの削除」項目（v-list-item）を選ぶ
+        clicked = False
+        for item in self.__visible(".v-list-item"):
+            if "イベントの削除" in item.text:
+                self.driver.execute_script("arguments[0].click();", item)
+                clicked = True
+                break
+        if not clicked:
+            self.logger.error("「イベントの削除」項目が見つかりません")
+            return False
+        time.sleep(1.5)
+
+        dialog = None
+        for d in self.__visible(".v-dialog"):
+            if "イベントを削除しますか" in d.text:
+                dialog = d
+                break
+        if dialog is None:
+            self.logger.error("削除確認ダイアログが開きませんでした")
+            return False
+
+        # 参加者への通知コメント（任意）
+        textareas = dialog.find_elements(By.CSS_SELECTOR, "textarea")
+        if textareas:
+            textareas[0].send_keys(comment)
+            time.sleep(0.4)
+
+        # 確認ダイアログの「削除する」はActionChainsで押す（JSクリックは効かない）
+        for b in dialog.find_elements(By.CSS_SELECTOR, "button"):
+            if b.text.strip() == "削除する":
+                ActionChains(self.driver).move_to_element(b).click().perform()
+                self._wait_render()
+                self.logger.info(f"イベントを削除しました: {event_id}")
+                return True
+        self.logger.error("削除ダイアログの「削除する」ボタンが見つかりません")
+        return False
 
     def _set_datetimes(self, start: datetime, end: datetime, deadline: datetime) -> bool:
         """日付/時間フィールドを書き換える
