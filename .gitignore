@@ -17,3 +17,6 @@ __pycache__/
 
 # 出力ファイル
 *.csv
+
+# テニスベアのログインセッション（Chromeプロファイル）
+.chrome-profile-tennisbear/

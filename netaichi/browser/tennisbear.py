@@ -4,6 +4,7 @@
 コピー元と同じコートの最新イベントを選んで日時だけ差し替える。
 """
 from datetime import datetime
+from pathlib import Path
 import re
 import time
 
@@ -13,6 +14,7 @@ from selenium.webdriver.common.by import By
 from .chrome import ChromeBrowser
 from netaichi.config import (
     IS_HEADLESS,
+    ROOT_DIR,
     TENNISBEAR_EMAIL,
     TENNISBEAR_PW,
 )
@@ -32,7 +34,9 @@ class TennisBear(ChromeBrowser):
     RENDER_WAIT = 4
 
     def __init__(self, is_headless=IS_HEADLESS, logger_name="TennisBear"):
-        super().__init__(is_headless, logger_name)
+        # 専用プロファイルにCookie/セッションを残し、ログインを省略する
+        profile = str(Path(ROOT_DIR) / ".chrome-profile-tennisbear")
+        super().__init__(is_headless, logger_name, user_data_dir=profile)
 
     def _wait_render(self, seconds: float | None = None):
         time.sleep(seconds or self.RENDER_WAIT)
@@ -51,6 +55,13 @@ class TennisBear(ChromeBrowser):
         return False
 
     def login(self) -> bool:
+        # 認証必須ページで既存セッションの有効性を確認し、有効なら省略する
+        self.go_page(self.ORGANIZED_URL)
+        self._wait_render()
+        if "/login" not in self.current_url and "organized" in self.current_url:
+            self.logger.info("テニスベア: セッション有効（ログイン省略）")
+            return True
+
         self.go_page(f"{self.BASE_URL}/login")
         self._wait_render()
         self.send_form(TennisBearSelector.LOGIN_EMAIL, TENNISBEAR_EMAIL)
@@ -110,6 +121,62 @@ class TennisBear(ChromeBrowser):
                     pass
             time.sleep(0.7)
         return existing
+
+    ORGANIZED_URL = (
+        "https://www.tennisbear.net/my-page/organized-and-participated-event"
+    )
+
+    def list_organized_events(self, today: datetime | None = None) -> list[dict]:
+        """主催・参加イベント一覧（今後の予定）から各イベント情報を取得する
+
+        各dict: id, date(datetime), start(時), court, participants, capacity,
+                is_lesson(【初回割】シングルス実戦), is_practice(シングルス練習)
+        """
+        self.go_page(self.ORGANIZED_URL)
+        self._wait_render(6)
+        if today is None:
+            today = datetime.today()
+
+        events = []
+        seen = set()
+        for a in self.driver.find_elements(By.CSS_SELECTOR, 'a[href*="/event/"]'):
+            href = a.get_attribute("href") or ""
+            m_id = re.search(r"/event/(\d+)/", href)
+            if not m_id or m_id.group(1) in seen:
+                continue
+            text = a.text
+            m_p = re.search(r"(\d+)人/(\d+)人", text)
+            m_d = re.search(r"(\d{1,2})/(\d{1,2})\(", text)
+            m_t = re.search(r"(\d{1,2}):(\d{2})", text)
+            if not (m_p and m_d and m_t):
+                continue
+            seen.add(m_id.group(1))
+            court = ""
+            cm = re.search(r"[都道府県]\s+(\S+)", text)
+            if cm:
+                court = cm.group(1)
+            events.append(
+                {
+                    "id": m_id.group(1),
+                    "date": self._resolve_date(int(m_d.group(1)), int(m_d.group(2)), today),
+                    "start": int(m_t.group(1)),
+                    "court": court,
+                    "participants": int(m_p.group(1)),
+                    "capacity": int(m_p.group(2)),
+                    "is_lesson": "シングルス実戦" in text,
+                    "is_practice": "シングルス練習" in text,
+                }
+            )
+        return events
+
+    @staticmethod
+    def _resolve_date(month: int, day: int, today: datetime) -> datetime:
+        """月日だけの表記に、今日以降で最も近い年を補う"""
+        for year in (today.year, today.year + 1):
+            d = datetime(year, month, day)
+            if d.date() >= today.date():
+                return d
+        return datetime(today.year, month, day)
 
     def create_event_from_template(
         self,

@@ -20,11 +20,18 @@ from netaichi.helper import AppLogger, random_sleep
 class ChromeBrowser:
     today = datetime.today().replace(day=1)
 
-    def __init__(self, is_headless: bool, logger_name: str = "ChromeBrowser") -> None:
+    def __init__(
+        self,
+        is_headless: bool,
+        logger_name: str = "ChromeBrowser",
+        user_data_dir: str | None = None,
+    ) -> None:
         self.driver = None
         self.is_headless = is_headless
         self.logger = AppLogger(logger_name)
         self.wait = None
+        # 指定するとCookie/セッションが永続化され、次回ログインを省略できる
+        self.user_data_dir = user_data_dir
 
     def __enter__(self):
         self.new()
@@ -39,7 +46,12 @@ class ChromeBrowser:
         options = webdriver.ChromeOptions()
         # config.seleniumでオプション設定
         for o in OPTIONS:
+            # プロファイル永続化時はシークレットモードと併用できない
+            if self.user_data_dir and o == "--incognito":
+                continue
             options.add_argument(o)
+        if self.user_data_dir:
+            options.add_argument(f"--user-data-dir={self.user_data_dir}")
         if self.is_headless:
             options.add_argument("--headless=new")
         # Chromeは自動テスト ソフトウェア~~ ｜ コンソールに表示されるエラー　を非表示
