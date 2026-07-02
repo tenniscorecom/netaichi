@@ -1,0 +1,40 @@
+name: 毎日の処理（prune → cancel）
+
+on:
+  schedule:
+    - cron: '0 0 * * *'   # 毎日0時UTC = 日本時間9時
+  workflow_dispatch:       # 手動実行も可能
+
+jobs:
+  daily:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python セットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Chrome セットアップ
+        uses: browser-actions/setup-chrome@v1
+
+      - name: Poetry インストール
+        run: pip install poetry
+
+      - name: 依存関係インストール
+        run: poetry install --no-root
+
+      - name: prune → cancel 実行
+        env:
+          NETAICHI_DEFAULT_PW: ${{ secrets.NETAICHI_DEFAULT_PW }}
+          OGURI_ACCOUNT_ID: ${{ secrets.OGURI_ACCOUNT_ID }}
+          KOMADA_ACCOUNT_ID: ${{ secrets.KOMADA_ACCOUNT_ID }}
+          OGURI_GSS_ID: ${{ secrets.OGURI_GSS_ID }}
+          KOMADA_GSS_ID: ${{ secrets.KOMADA_GSS_ID }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          TENNISBEAR_EMAIL: ${{ secrets.TENNISBEAR_EMAIL }}
+          TENNISBEAR_PW: ${{ secrets.TENNISBEAR_PW }}
+          GSS_CREDENTIALS_JSON: ${{ secrets.GSS_CREDENTIALS_JSON }}
+        run: poetry run python -m netaichi daily --headless

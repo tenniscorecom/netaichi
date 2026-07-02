@@ -9,12 +9,10 @@ import yaml
 from dateutil.relativedelta import relativedelta
 
 from netaichi.browser import NetAichi
-from netaichi.config import IS_HEADLESS, RULES_DIR
-from netaichi.db import NetaichiDatabase, T_AvailableSlot, select
+from netaichi.config import IS_HEADLESS, OGURI_GSS_ID, RULES_DIR
+from netaichi.helper import SpreadSheet
 from netaichi.notify import notify
 from netaichi.services.lottery import GROUP_IDS, rule_applies
-
-db = NetaichiDatabase(False)
 
 WEEKDAY_LABELS = ["月", "火", "水", "木", "金", "土", "日"]
 
@@ -69,22 +67,15 @@ def in_time_ranges(slot: dict, ranges: list) -> bool:
 
 
 def filter_new(slots: list[dict]) -> list[dict]:
-    """発見済みテーブルに無い空きだけ返し、テーブルに登録する"""
-    db.create_tables()
+    """スプレッドシートに記録がない空きだけ返し、シートに追記する"""
+    ss = SpreadSheet(OGURI_GSS_ID)
+    notified = ss.get_notified_slots()
     new = []
-    with db.session() as session:
-        for slot in slots:
-            exists = session.exec(
-                select(T_AvailableSlot).where(
-                    T_AvailableSlot.value == slot["value"],
-                    T_AvailableSlot.date == slot["date"],
-                    T_AvailableSlot.start == slot["start"],
-                )
-            ).first()
-            if exists is None:
-                session.add(T_AvailableSlot(**slot))
-                new.append(slot)
-        session.commit()
+    for slot in slots:
+        key = (slot["value"], slot["date"].strftime("%Y-%m-%d"), str(slot["start"]))
+        if key not in notified:
+            ss.append_availability_slot(slot)
+            new.append(slot)
     return new
 
 

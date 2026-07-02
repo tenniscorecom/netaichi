@@ -54,6 +54,7 @@ class ChromeBrowser:
             options.add_argument(f"--user-data-dir={self.user_data_dir}")
         if self.is_headless:
             options.add_argument("--headless=new")
+            options.add_argument("--no-sandbox")
         # Chromeは自動テスト ソフトウェア~~ ｜ コンソールに表示されるエラー　を非表示
         options.add_experimental_option(
             "excludeSwitches", ["enable-automation", "enable-logging"]

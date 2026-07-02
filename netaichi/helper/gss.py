@@ -1,9 +1,14 @@
-from oauth2client.service_account import ServiceAccountCredentials
+import json
+import os
+from datetime import datetime
+
 import gspread
 import pandas as pd
-from gspread_dataframe import set_with_dataframe
-from netaichi.config import GSS_KEYFILE
 from dataclasses import dataclass
+from gspread_dataframe import set_with_dataframe
+from oauth2client.service_account import ServiceAccountCredentials
+
+from netaichi.config import GSS_KEYFILE
 from netaichi.db import M_Account
 
 
@@ -12,8 +17,13 @@ class SpreadSheet:
     def __init__(self, id: str) -> None:
         scope = ['https://spreadsheets.google.com/feeds',
                  'https://www.googleapis.com/auth/drive']
-        credentials = ServiceAccountCredentials.from_json_keyfile_name(
-            GSS_KEYFILE, scope)
+        creds_json = os.environ.get('GSS_CREDENTIALS_JSON')
+        if creds_json:
+            credentials = ServiceAccountCredentials.from_json_keyfile_dict(
+                json.loads(creds_json), scope)
+        else:
+            credentials = ServiceAccountCredentials.from_json_keyfile_name(
+                GSS_KEYFILE, scope)
         self.client = gspread.authorize(credentials)
         self.workbook_id = id
         self.open_workbook()
@@ -79,6 +89,29 @@ class SpreadSheet:
     def replace_all(self, sheet, df):
         set_with_dataframe(sheet, df, allow_formulas=False)
 
+    def _get_or_create_sheet(self, name: str, cols: int = 5) -> gspread.Worksheet:
+        try:
+            return self.WORKBOOK.worksheet(name)
+        except gspread.exceptions.WorksheetNotFound:
+            sheet = self.WORKBOOK.add_worksheet(title=name, rows=2000, cols=cols)
+            return sheet
+
+    def get_notified_slots(self) -> set:
+        """通知済み空き枠を (value, date_str, start_str) のセットで返す"""
+        sheet = self._get_or_create_sheet(Sheets.AVAILABILITY)
+        rows = sheet.get_all_values()
+        return {(r[0], r[1], r[2]) for r in rows if len(r) >= 3}
+
+    def append_availability_slot(self, slot: dict) -> None:
+        sheet = self._get_or_create_sheet(Sheets.AVAILABILITY)
+        sheet.append_row([
+            slot["value"],
+            slot["date"].strftime("%Y-%m-%d"),
+            str(slot["start"]),
+            str(slot["end"]),
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        ])
+
 
 @dataclass
 class Headers:
@@ -94,3 +127,4 @@ class Sheets:
     ACCOUNT = 'アカウント一覧'
     RESERVE = '予約情報'
     LOTTERY = '抽選情報'
+    AVAILABILITY = '通知済み空き'
