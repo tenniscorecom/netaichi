@@ -9,15 +9,14 @@ class JspSelect:
     def __init__(self, jsp) -> None:
         self.jsp: Jsp = jsp
 
-    def court(self, value: str):
+    def court(self, value: str) -> bool:
         self.jsp.select_radio_by_value(value)
-        r = self.jsp.click(Selector.BTN_COURT)
-        if r is False:
+        if self.jsp.click(Selector.BTN_COURT) is False:
             return False
         # 施設によって細分化されてる場合はここから分岐
-        r = self.jsp.click(Selector.BTN_AREA)
-        if r is False:
+        if self.jsp.click(Selector.BTN_AREA) is False:
             return False
+        return True
 
     def time(self, start, end, span=2):
         times = self.jsp.get.times()

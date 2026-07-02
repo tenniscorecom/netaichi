@@ -140,6 +140,43 @@ class NetAichi(Jsp):
             return False
         return True
 
+    def find_available_slots(self, courts: list[str], dates: list) -> list[dict]:
+        """予約申込画面から各コート・日付の空き時間帯を収集する
+
+        ※時間帯チェックボックスが有効=空きあり、という抽選申込画面と
+          同じUI構造を前提にしている。実サイトでの動作確認が必要。
+        """
+        self.go.mypage().reservation()
+        slots = []
+        for value in courts:
+            if self.select.court(value) is False:
+                self.logger.warning(f"コートを選択できませんでした: {value}")
+                continue
+            for date in dates:
+                try:
+                    self.go.change_calendar_date(date)
+                    times = self.get.times()
+                    if len(times) < 2:
+                        continue
+                    span = abs(times[0] - times[1])
+                    checkboxes = self.get_elements_by_css(Selector.SELECT_CHECKBOX)
+                    for i, cb in enumerate(checkboxes):
+                        if i < len(times) and cb.is_enabled():
+                            slots.append(
+                                {
+                                    "value": value,
+                                    "date": date,
+                                    "start": times[i],
+                                    "end": times[i] + span,
+                                }
+                            )
+                except Exception as e:
+                    self.logger.error(f"空き取得エラー {value} {date:%Y-%m-%d}: {e}")
+            # 施設選択画面へ戻る
+            self.click(Selector.BTN_REVERSE)
+            self.click(Selector.BTN_REVERSE2)
+        return slots
+
     def to_value(self, court_name: str) -> int:
         if self.properties is None:
             with self.db.session() as session:

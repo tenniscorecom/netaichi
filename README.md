@@ -21,6 +21,22 @@ poetry install --no-root
 | `poetry run python -m netaichi lottery komada` | komadaグループの抽選申込を実行 |
 | `poetry run python -m netaichi lottery oguri --dry-run` | 確認画面まで進むが確定しない（動作確認用） |
 | `poetry run python -m netaichi reserve` | 予約情報を収集しスプレッドシートに反映 |
+| `poetry run python -m netaichi availability` | 空き状況をチェックし新規の空きをDiscordに通知 |
+| `poetry run python -m netaichi availability --no-notify` | 通知せず結果表示のみ（動作確認用） |
+
+## 空き状況チェックの定期実行
+
+チェック条件は `rules/availability_rules.yaml` で設定する。
+
+Windowsタスクスケジューラへの登録例（毎時0分に実行）:
+
+```powershell
+$action = New-ScheduledTaskAction -Execute "F:\dev\netaichi\.venv\Scripts\python.exe" `
+    -Argument "-m netaichi availability" -WorkingDirectory "F:\dev\netaichi"
+$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
+    -RepetitionInterval (New-TimeSpan -Hours 1)
+Register-ScheduledTask -TaskName "netaichi-availability" -Action $action -Trigger $trigger
+```
 
 ## 抽選申込ルール
 

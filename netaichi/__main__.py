@@ -19,6 +19,11 @@ def main():
 
     sub.add_parser("reserve", help="予約情報を収集しスプレッドシートに反映")
 
+    p_avail = sub.add_parser("availability", help="空き状況をチェックし新規の空きをDiscordに通知")
+    p_avail.add_argument(
+        "--no-notify", action="store_true", help="通知せず結果表示のみ（動作確認用）"
+    )
+
     args = parser.parse_args()
 
     match args.command:
@@ -34,6 +39,13 @@ def main():
             from netaichi.services.reserve import reserve
 
             reserve()
+        case "availability":
+            from netaichi.services.availability import check
+
+            new = check(notify_enabled=not args.no_notify)
+            print(f"新規の空き: {len(new)}件")
+            for slot in new:
+                print(slot)
 
 
 if __name__ == "__main__":

@@ -61,6 +61,16 @@ class T_LotteryStatusDetail(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
 
 
+class T_AvailableSlot(SQLModel, table=True):
+    """空き状況チェックで発見済みの空き枠（通知の重複防止用）"""
+    value: str
+    date: datetime
+    start: int
+    end: int
+    first_seen: datetime = Field(default_factory=datetime.now, nullable=False)
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+
 class SessionFactory:
 
     @classmethod
