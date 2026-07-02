@@ -69,6 +69,8 @@ class TennisBear(ChromeBrowser):
 
         「過去のイベントをコピー」ダイアログのイベント一覧
         （タイトルと "2026/9/28(月) 19:00" 形式の日時）から抽出する。
+        一覧は新しい順で下にスクロールすると過去のイベントが追加ロードされる。
+        過去日付が現れる（＝未来分を読み切った）までスクロールして集める。
         """
         self.go_page(f"{self.BASE_URL}/event/create")
         self._wait_render(5)
@@ -79,12 +81,34 @@ class TennisBear(ChromeBrowser):
         if not dialogs:
             self.logger.error("コピー元一覧ダイアログが開きませんでした")
             return set()
+        dialog = dialogs[-1]
 
-        existing = set()
         pattern = r"(\d{4})/(\d{1,2})/(\d{1,2})\([月火水木金土日]\)\s*(\d{1,2}):(\d{2})"
-        for m in re.finditer(pattern, dialogs[-1].text):
-            y, mo, d, h, _ = map(int, m.groups())
-            existing.add((datetime(y, mo, d), h))
+        today = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
+        existing = set()
+        prev_count = -1
+        for _ in range(40):
+            for m in re.finditer(pattern, dialog.text):
+                y, mo, d, h, _ = map(int, m.groups())
+                existing.add((datetime(y, mo, d), h))
+            # 過去日付まで到達した（未来分を読み切った）か、増分が無くなれば終了
+            if any(dt < today for dt, _ in existing):
+                break
+            if len(existing) == prev_count:
+                break
+            prev_count = len(existing)
+            # ダイアログ本体と内部のスクロールコンテナ（div）を両方最下部へ
+            self.driver.execute_script(
+                "arguments[0].scrollTop = arguments[0].scrollHeight;", dialog
+            )
+            for sc in dialog.find_elements(By.CSS_SELECTOR, "div"):
+                try:
+                    self.driver.execute_script(
+                        "arguments[0].scrollTop = arguments[0].scrollHeight;", sc
+                    )
+                except Exception:
+                    pass
+            time.sleep(0.7)
         return existing
 
     def create_event_from_template(
