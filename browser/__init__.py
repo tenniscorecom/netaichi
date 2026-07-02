@@ -1,0 +1,1 @@
+from .netaichi import NetAichi

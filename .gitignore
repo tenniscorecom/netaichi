@@ -1,0 +1,19 @@
+# 認証情報・シークレット
+.env
+config/json/
+
+# データベース
+*.sqlite
+
+# ログ
+logs/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.mypy_cache/
+.pytest_cache/
+
+# 出力ファイル
+*.csv
