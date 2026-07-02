@@ -13,8 +13,8 @@ from datetime import datetime
 from selenium.webdriver import Chrome as WebDriver
 
 # 自作モジュール
-from config import OPTIONS
-from helper import AppLogger, random_sleep
+from netaichi.config import OPTIONS
+from netaichi.helper import AppLogger, random_sleep
 
 
 class ChromeBrowser:

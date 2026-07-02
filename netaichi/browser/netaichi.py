@@ -1,12 +1,12 @@
-from .jsp import Jsp
-from .jsp.selector import Selector
-from database import NetaichiDatabase, M_CourtProperty, T_LotteryData
+from .pages import Jsp
+from .pages.selector import Selector
+from netaichi.db import NetaichiDatabase, M_CourtProperty, T_LotteryData
 from sqlmodel import delete, select
 import pandas as pd
 from datetime import datetime as dd
 import re
-from helper import sqlmodel_to_df
-from config import IS_HEADLESS
+from netaichi.helper import sqlmodel_to_df
+from netaichi.config import IS_HEADLESS
 
 
 class NetAichi(Jsp):
@@ -27,9 +27,11 @@ class NetAichi(Jsp):
     ]
     properties = None
 
-    def __init__(self, is_headless=IS_HEADLESS, logger_name="NetAichi"):
+    def __init__(self, is_headless=IS_HEADLESS, logger_name="NetAichi", dry_run=False):
         super().__init__(is_headless, logger_name)
         self.db = NetaichiDatabase(False)
+        # Trueの場合、抽選確認画面まで進むが確定はしない
+        self.dry_run = dry_run
 
     def add_lottery(self, df: pd.DataFrame):
         for value, group in df.groupby("value"):
@@ -47,6 +49,10 @@ class NetAichi(Jsp):
                         self.select.players(4)
                         self.click(Selector.BTN_CHECK)
                         if not self.__check_lottery(g):
+                            continue
+                        if self.dry_run:
+                            self.logger.info(f"[dry-run] 確定せずスキップ: {g}")
+                            self.click(Selector.BTN_RESELECT_DATE)
                             continue
                         self.click(Selector.BTN_CONFIRM)
                         self.alert_switch(True)
@@ -87,6 +93,10 @@ class NetAichi(Jsp):
                     self.select.players(players)
                     self.click(Selector.BTN_CHECK)
                     if not self.__check_lottery(g):
+                        continue
+                    if self.dry_run:
+                        self.logger.info(f"[dry-run] 確定せずスキップ: {g}")
+                        self.click(Selector.BTN_RESELECT_DATE)
                         continue
                     self.click(Selector.BTN_CONFIRM)
                     self.alert_switch(True)

@@ -1,11 +1,11 @@
-from database import M_Account
+from netaichi.db import M_Account
 from .select import JspSelect
 from .get import JspGet
 from .go import JspGo
-from browser.chrome import ChromeBrowser
+from netaichi.browser.chrome import ChromeBrowser
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
-from config.netaichi import default_pw
+from netaichi.config import default_pw
 from .selector import Selector
 from .message import SystemMessage, ErrorMessage
 from collections.abc import Generator

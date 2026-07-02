@@ -1,8 +1,9 @@
 
 from logging import Logger, getLogger, StreamHandler, FileHandler, Formatter
 from logging import DEBUG, INFO
-from pathlib import Path
 from datetime import datetime
+
+from netaichi.config import LOGS_DIR
 
 
 class AppLogger:
@@ -16,13 +17,15 @@ class AppLogger:
         self.FILE_NAME = name
         self.CONSOLE_LEVEL = console_level
         self.FILE_LEVEL = file_level
-        path = Path('logs') / self.FILE_NAME
-        path.mkdir(exist_ok=True, parents=True)
+        self.log_dir = LOGS_DIR / self.FILE_NAME
+        self.log_dir.mkdir(exist_ok=True, parents=True)
         formatter = Formatter('%(asctime)s, %(levelname)s, %(message)s')
         self.logger = getLogger(self.FILE_NAME)
         self.logger.setLevel(self.CONSOLE_LEVEL)
-        self.__set_console_handler(formatter)
-        self.__set_file_handler(formatter)
+        # 同名ロガーの多重生成でハンドラが重複しないようにする
+        if not self.logger.handlers:
+            self.__set_console_handler(formatter)
+            self.__set_file_handler(formatter)
 
     def info(self, message) -> None:
         self.logger.info(message)
@@ -46,7 +49,7 @@ class AppLogger:
             self,
             formatter: Formatter) -> None:
         file_name = datetime.now().strftime('%Y_%m_%d')
-        handler = FileHandler(f"./logs/{self.FILE_NAME}/{file_name}.log")
+        handler = FileHandler(self.log_dir / f"{file_name}.log", encoding='utf-8')
         handler.setLevel(self.FILE_LEVEL)
         handler.setFormatter(formatter)
         self.logger.addHandler(handler)

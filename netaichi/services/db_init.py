@@ -1,9 +1,9 @@
-from helper import SpreadSheet
-from config import OGURI_GSS_ID, KOMADA_GSS_ID, KOMADA_ACCOUNT_ID, OGURI_ACCOUNT_ID, IS_HEADLESS
+from netaichi.helper import SpreadSheet
+from netaichi.config import OGURI_GSS_ID, KOMADA_GSS_ID, KOMADA_ACCOUNT_ID, OGURI_ACCOUNT_ID, IS_HEADLESS
 
 
 def db_init():
-    from database import NetaichiDatabase
+    from netaichi.db import NetaichiDatabase
     db = NetaichiDatabase()
     account(db)
 

@@ -1,0 +1,31 @@
+# 抽選申込ルール
+#
+# courts の値はネットあいちの施設value（netaichi/browser/pages/data.py の CourtValues 参照）
+#   "130"=大高緑地  "180"=小幡緑地  "310"/"320"=健康の森
+#   "400"=モリコロ  "410"=モリコロ(フットサル兼用)
+#   "530"/"540"/"550"=口論義  "660"=森林公園
+#
+# days:
+#   weekend_holiday … 土日または祝日
+#   [0,1,3,4] のような数値リスト … 曜日指定（月=0）。祝日は除外される
+groups:
+  oguri:
+    players: 4                 # 抽選申込時の利用人数
+    rules:
+      - name: 土日祝の昼
+        days: weekend_holiday
+        times: [[9, 13], [13, 17]]
+        amount: 1
+        courts: ["130", "180", "400", "410", "660"]
+      - name: 平日ナイター（モリコロ）
+        days: [0, 1, 3, 4]     # 月火木金
+        times: [[19, 21]]
+        amount: 1
+        courts: ["400"]
+
+  komada:
+    players: 9
+    start_account_id: "01154051"   # このIDのアカウントから処理を再開（nullなら先頭から）
+    skip_alltime: "240"            # 申込合計時間がこの値のアカウントはスキップ
+    update_court_properties: true
+    rules: []                      # 申込データはマスターアカウントの登録内容をそのまま使う

@@ -1,7 +1,7 @@
 from .message import InfoMessage, ErrorMessage
 from .selector import Selector
 from .data import LotteryStatusDetail, LotteryStatus
-from database import T_LotteryData
+from netaichi.db import T_LotteryData
 from unicodedata import normalize
 import pandas as pd
 from typing import TYPE_CHECKING

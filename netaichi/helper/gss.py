@@ -2,21 +2,18 @@ from oauth2client.service_account import ServiceAccountCredentials
 import gspread
 import pandas as pd
 from gspread_dataframe import set_with_dataframe
-from pathlib import Path
-from config.gss import JSON_PATH
+from netaichi.config import GSS_KEYFILE
 from dataclasses import dataclass
-from database import M_Account
+from netaichi.db import M_Account
 
 
 class SpreadSheet:
 
     def __init__(self, id: str) -> None:
-        json_path = Path() / 'config' / 'json'
-        Keyfile = json_path / JSON_PATH
         scope = ['https://spreadsheets.google.com/feeds',
                  'https://www.googleapis.com/auth/drive']
         credentials = ServiceAccountCredentials.from_json_keyfile_name(
-            Keyfile, scope)
+            GSS_KEYFILE, scope)
         self.client = gspread.authorize(credentials)
         self.workbook_id = id
         self.open_workbook()

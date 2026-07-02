@@ -1,4 +1,4 @@
-from config.netaichi import DB_PATH
+from netaichi.config import DB_PATH
 from .models import SessionFactory
 from sqlmodel import SQLModel
 

@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
-from helper import random_sleep
+from netaichi.helper import random_sleep
 
 from .data import PAGE_STATUS
 from .selector import Selector
