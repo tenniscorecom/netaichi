@@ -2,12 +2,12 @@
 #
 # template_title: コピー元にする過去イベントのタイトル
 # event_hours: 1イベントの長さ（4時間の予約は2時間×2枠に分割される）
-# deadline_hours_before: 申込期限 = 開始時刻の何時間前か
+# deadline_days_before: 申込期限 = レッスン日の何日前か（同時刻）
 # submit: false の間は確認モード（フォーム入力まで行い、確定ボタンは押さない）
 # courts: 予約データのコート名(部分一致キー) → テニスベア上のコート名(照合用)
 template_title: 【初回割】シングルス実戦【最大4名】
 event_hours: 2
-deadline_hours_before: 48
+deadline_days_before: 2
 submit: false
 courts:
   大高緑地: 大高緑地

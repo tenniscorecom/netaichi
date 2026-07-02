@@ -4,10 +4,11 @@
 コピー元と同じコートの最新イベントを選んで日時だけ差し替える。
 """
 from datetime import datetime
+import re
 import time
 
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
 
 from .chrome import ChromeBrowser
 from netaichi.config import (
@@ -118,85 +119,130 @@ class TennisBear(ChromeBrowser):
         if not self._set_datetimes(start, end, deadline):
             return False
 
-        # 次へ → 確認ページ
+        # 次へ → 招待モーダルが開く
         if not self._click_button_by_text("次へ"):
             return False
         self._wait_render()
 
+        # 招待モーダルが開いたことを確認
+        if not self.__invite_dialog_open():
+            self.logger.error("「次へ」後の招待モーダルが開きませんでした（未入力の必須項目がある可能性）")
+            return False
+
         if not submit:
             self.logger.info(
-                f"[確認モード] 確定ボタンは押していません: {court_name} {start:%m/%d %H:%M}"
+                f"[確認モード] 招待モーダルまで到達、確定せず終了: {court_name} {start:%m/%d %H:%M}"
             )
             return True
 
-        # 確認ページの確定ボタン（「作成」を含むボタンを想定）
-        if not self._click_button_by_text("作成"):
+        # 「招待せずにイベントを作成」で確定
+        if not self._click_button_by_text("招待せずにイベントを作成"):
             return False
         self._wait_render()
         self.logger.info(f"イベントを作成しました: {court_name} {start:%m/%d %H:%M}-{end:%H:%M}")
         return True
 
     def _set_datetimes(self, start: datetime, end: datetime, deadline: datetime) -> bool:
-        """開始・終了・申込期限の日付/時間フィールドを書き換える"""
-        date_inputs = self.driver.find_elements(
-            By.CSS_SELECTOR, TennisBearSelector.DATE_INPUTS
-        )
-        # 表示中のdate入力のみ対象（開始日・終了日・申込期限）
-        visible_dates = [e for e in date_inputs if e.is_displayed()]
-        if len(visible_dates) < 3:
-            self.logger.error(f"日付フィールドが想定数未満です: {len(visible_dates)}")
-            return False
+        """日付/時間フィールドを書き換える
 
-        values = [
-            (visible_dates[0], self._format_date(start)),
-            (visible_dates[1], self._format_date(end)),
-            (visible_dates[2], self._format_date(deadline)),
-        ]
-        for element, value in values:
-            if not self._set_input_value(element, value):
+        日付欄・時間欄とも readonly で、クリックするとVuetifyのカレンダー／
+        時計ピッカーが開く。ピッカーを操作して値を設定する。
+
+        「募集開始日を設定する」未チェック時、表示中のdate入力は
+        [開始日, 終了日, 申込期限, キャンセル期限] の4つ。
+        申込期限とキャンセル期限は同じ deadline を入れる。
+        """
+        # [開始, 終了, 申込期限, キャンセル期限]
+        targets = [start, end, deadline, deadline]
+
+        # 選択でDOMが組み替わるため、各操作の直前にフィールドを取り直す
+        for i, dt in enumerate(targets):
+            fields = self.__visible(TennisBearSelector.DATE_INPUTS)
+            if len(fields) < 4:
+                self.logger.error(f"日付フィールドが想定数未満です: {len(fields)}")
                 return False
-
-        # 時間フィールド（各date入力の直後にある placeholder="時間" の入力）
-        time_inputs = [
-            e
-            for e in self.driver.find_elements(By.CSS_SELECTOR, 'input[placeholder="時間"]')
-            if e.is_displayed()
-        ]
-        if len(time_inputs) < 3:
-            self.logger.error(f"時間フィールドが想定数未満です: {len(time_inputs)}")
-            return False
-        for element, value in [
-            (time_inputs[0], f"{start:%H:%M}"),
-            (time_inputs[1], f"{end:%H:%M}"),
-            (time_inputs[2], f"{deadline:%H:%M}"),
-        ]:
-            if not self._set_input_value(element, value):
+            if not self._pick_date(fields[i], dt):
+                return False
+        for i, dt in enumerate(targets):
+            fields = self.__visible('input[placeholder="時間"]')
+            if len(fields) < 4:
+                self.logger.error(f"時間フィールドが想定数未満です: {len(fields)}")
+                return False
+            if not self._pick_time(fields[i], dt.hour, dt.minute):
                 return False
         return True
 
-    WEEKDAY_LABELS = ["月", "火", "水", "木", "金", "土", "日"]
+    def __visible(self, css: str) -> list:
+        return [
+            e for e in self.driver.find_elements(By.CSS_SELECTOR, css) if e.is_displayed()
+        ]
 
-    def _format_date(self, dt: datetime) -> str:
-        # サイトの表記例: 2026/9/28(月)
-        return f"{dt.year}/{dt.month}/{dt.day}({self.WEEKDAY_LABELS[dt.weekday()]})"
+    def __invite_dialog_open(self) -> bool:
+        """「次へ」後に開く招待モーダルが表示されているか"""
+        for d in self.__visible(".v-dialog"):
+            if "招待せずにイベントを作成" in d.text:
+                return True
+        return False
 
-    def _set_input_value(self, element, value: str) -> bool:
-        """Vue管理下のinputに値を反映する（inputイベントを発火）"""
-        try:
-            self.driver.execute_script(
-                """
-                const el = arguments[0], value = arguments[1];
-                el.focus();
-                el.value = value;
-                el.dispatchEvent(new Event('input', {bubbles: true}));
-                el.dispatchEvent(new Event('change', {bubbles: true}));
-                el.blur();
-                """,
-                element,
-                value,
-            )
-            time.sleep(0.3)
-            return True
-        except Exception as e:
-            self.logger.error(f"入力に失敗しました: {value} ({e})")
+    def _open_picker(self, field):
+        """readonlyフィールドをクリックしてピッカー(.v-menu__content)を開く"""
+        self.driver.execute_script("arguments[0].scrollIntoView({block:'center'});", field)
+        time.sleep(0.4)
+        field.click()
+        time.sleep(1.0)
+        menus = self.__visible(".v-menu__content")
+        return menus[-1] if menus else None
+
+    def _pick_date(self, field, target: datetime) -> bool:
+        menu = self._open_picker(field)
+        if menu is None:
+            self.logger.error("日付ピッカーが開きませんでした")
             return False
+        # ヘッダーの年月を読み、前月/次月ボタンで目的の月まで移動する
+        for _ in range(36):
+            header = menu.find_element(
+                By.CSS_SELECTOR, ".v-date-picker-header__value button"
+            ).text
+            m = re.match(r"(\d+)\D+(\d+)", header)
+            cur_y, cur_m = int(m.group(1)), int(m.group(2))
+            diff = (target.year - cur_y) * 12 + (target.month - cur_m)
+            if diff == 0:
+                break
+            label = "Next month" if diff > 0 else "Previous month"
+            menu.find_element(By.CSS_SELECTOR, f'button[aria-label="{label}"]').click()
+            time.sleep(0.35)
+        for b in menu.find_elements(By.CSS_SELECTOR, ".v-date-picker-table button"):
+            if b.text.strip() == str(target.day):
+                self.driver.execute_script("arguments[0].click();", b)
+                time.sleep(0.5)
+                return True
+        self.logger.error(f"日付ボタンが見つかりません: {target:%Y-%m-%d}")
+        return False
+
+    def _pick_time(self, field, hour: int, minute: int) -> bool:
+        menu = self._open_picker(field)
+        if menu is None:
+            self.logger.error("時間ピッカーが開きませんでした")
+            return False
+        # 時計ピッカー：時を選ぶと自動で分モードに切り替わる
+        if not self._click_clock_item(menu, hour):
+            return False
+        time.sleep(0.6)
+        if not self._click_clock_item(menu, minute):
+            return False
+        time.sleep(0.4)
+        # 分選択後もメニューが残る場合があるのでbodyクリックで閉じる
+        self.driver.execute_script("document.body.click();")
+        time.sleep(0.3)
+        return True
+
+    def _click_clock_item(self, menu, value: int) -> bool:
+        # アナログ時計はマウス座標から角度を計算するため、JSクリックでは
+        # 選択されない。ActionChainsで実際にクリックする必要がある。
+        candidates = {str(value), f"{value:02d}"}
+        for item in menu.find_elements(By.CSS_SELECTOR, ".v-time-picker-clock__item"):
+            if item.text.strip() in candidates:
+                ActionChains(self.driver).move_to_element(item).click().perform()
+                return True
+        self.logger.error(f"時計の値が見つかりません: {value}")
+        return False

@@ -116,7 +116,7 @@ def run(submit: bool | None = None) -> list[dict]:
         for ev in new:
             start_dt = ev["date"].replace(hour=ev["start"], minute=0)
             end_dt = ev["date"].replace(hour=ev["end"], minute=0)
-            deadline = start_dt - timedelta(hours=conf["deadline_hours_before"])
+            deadline = start_dt - timedelta(days=conf["deadline_days_before"])
             ok = tb.create_event_from_template(
                 template_title=conf["template_title"],
                 court_name=ev["bear_court"],
