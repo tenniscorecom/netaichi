@@ -1,29 +1,32 @@
 from netaichi.browser import NetAichi
-from netaichi.config import OGURI_ACCOUNT_ID, KOMADA_ACCOUNT_ID, IS_HEADLESS, OGURI_GSS_ID
+from netaichi.config import OGURI_ACCOUNT_ID, IS_HEADLESS, OGURI_GSS_ID
 from netaichi.db import NetaichiDatabase, M_Account, select
 import pandas as pd
 from netaichi.helper import SpreadSheet
 
+db = NetaichiDatabase(False)
+
+
+def collect_reservations(group_id: str = OGURI_ACCOUNT_ID) -> pd.DataFrame:
+    """グループ全アカウントの予約情報を収集する
+
+    columns: court, court_number, date, start, end, account
+    """
+    temp = pd.DataFrame()
+    with NetAichi(IS_HEADLESS) as na:
+        with db.session() as session:
+            accounts = session.exec(
+                select(M_Account).where(M_Account.account_group == group_id)
+            ).all()
+        for account in accounts:
+            na.login(account=account)
+            reserve_df = na.get.reservation()
+            temp = pd.concat([temp, reserve_df])
+    return temp
+
 
 def reserve():
-
-    db = NetaichiDatabase()
-
-    with NetAichi(IS_HEADLESS) as na:
-        temp = pd.DataFrame()
-        with db.session() as session:
-            accounts = session.exec(select(M_Account)).all()
-            for account in accounts:
-                if account.account_group in [OGURI_ACCOUNT_ID]:
-                    na.login(account=account)
-                    reserve_df = na.get.reservation()
-
-                    if account.account_group == KOMADA_ACCOUNT_ID:
-                        if reserve_df.empty:
-                            continue
-                        reserve_df = reserve_df[reserve_df['court'].str.contains(
-                            '大高緑地')]
-                    temp = pd.concat([temp, reserve_df])
-        temp.to_csv('./df.csv', header=True, index=False)
+    df = collect_reservations()
     ss = SpreadSheet(OGURI_GSS_ID)
-    ss.replace_all(ss.reserve_sheet, temp)
+    ss.replace_all(ss.reserve_sheet, df)
+    return df

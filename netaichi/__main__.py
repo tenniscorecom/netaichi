@@ -24,6 +24,12 @@ def main():
         "--no-notify", action="store_true", help="通知せず結果表示のみ（動作確認用）"
     )
 
+    p_bear = sub.add_parser("bear", help="予約確定分の募集をテニスベアに作成")
+    p_bear.add_argument(
+        "--submit", action="store_true",
+        help="確定まで実行する（未指定時は bear_rules.yaml の submit 設定に従う）",
+    )
+
     args = parser.parse_args()
 
     match args.command:
@@ -46,6 +52,13 @@ def main():
             print(f"新規の空き: {len(new)}件")
             for slot in new:
                 print(slot)
+        case "bear":
+            from netaichi.services.bear import run
+
+            posted = run(submit=True if args.submit else None)
+            print(f"募集作成: {len(posted)}件")
+            for ev in posted:
+                print(ev)
 
 
 if __name__ == "__main__":

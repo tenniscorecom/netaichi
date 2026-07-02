@@ -22,6 +22,10 @@ GSS_KEYFILE = ROOT_DIR / 'config' / 'json' / 'authorized_user.json'
 # Discord 通知
 DISCORD_WEBHOOK_URL = os.environ.get('DISCORD_WEBHOOK_URL', '')
 
+# テニスベア
+TENNISBEAR_EMAIL = os.environ.get('TENNISBEAR_EMAIL', '')
+TENNISBEAR_PW = os.environ.get('TENNISBEAR_PW', '')
+
 IS_HEADLESS = False
 DB_PATH = str(ROOT_DIR / 'netaichi2024')
 LOGS_DIR = ROOT_DIR / 'logs'

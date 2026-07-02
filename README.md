@@ -23,6 +23,18 @@ poetry install --no-root
 | `poetry run python -m netaichi reserve` | 予約情報を収集しスプレッドシートに反映 |
 | `poetry run python -m netaichi availability` | 空き状況をチェックし新規の空きをDiscordに通知 |
 | `poetry run python -m netaichi availability --no-notify` | 通知せず結果表示のみ（動作確認用） |
+| `poetry run python -m netaichi bear` | 予約確定分の募集をテニスベアに作成 |
+| `poetry run python -m netaichi bear --submit` | 確認モードを無視して確定まで実行 |
+
+## テニスベア募集の自動作成
+
+`rules/bear_rules.yaml` で設定。「過去のイベントをコピー」機能を使い、
+コピー元と同じコートの過去イベントを選んで**日時（開始・終了・申込期限）だけ差し替える**。
+タイトル・説明・料金・キャンセル規定はコピー元から引き継がれる。
+
+- 4時間の予約は2時間×2枠のイベントに分割される
+- 掲載済みの枠は `T_BearPost` テーブルで管理し二重掲載しない
+- `submit: false`（確認モード）の間はフォーム入力まで行い確定ボタンを押さない
 
 ## 空き状況チェックの定期実行
 
