@@ -97,11 +97,11 @@ def format_message(slots: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def check(notify_enabled: bool = True) -> list[dict]:
+def check(notify_enabled: bool = True, headless: bool = IS_HEADLESS) -> list[dict]:
     conf = load_rules()
     dates = target_dates(conf)
     slots = []
-    with NetAichi(IS_HEADLESS) as na:
+    with NetAichi(headless) as na:
         na.login(id=GROUP_IDS[conf["account"]])
         for park in conf["parks"]:
             slots += na.find_available_slots(

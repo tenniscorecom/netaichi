@@ -23,6 +23,9 @@ def main():
     p_avail.add_argument(
         "--no-notify", action="store_true", help="通知せず結果表示のみ（動作確認用）"
     )
+    p_avail.add_argument(
+        "--headless", action="store_true", help="ブラウザ画面を表示せず実行（定期実行用）"
+    )
 
     p_bear = sub.add_parser("bear", help="予約確定分の募集をテニスベアに作成")
     p_bear.add_argument(
@@ -48,7 +51,7 @@ def main():
         case "availability":
             from netaichi.services.availability import check
 
-            new = check(notify_enabled=not args.no_notify)
+            new = check(notify_enabled=not args.no_notify, headless=args.headless)
             print(f"新規の空き: {len(new)}件")
             for slot in new:
                 print(slot)
