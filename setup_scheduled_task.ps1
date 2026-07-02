@@ -18,16 +18,19 @@ Register-ScheduledTask -TaskName "netaichi-availability" -Action $action -Trigge
 Get-ScheduledTask -TaskName "netaichi-availability" | Select-Object TaskName, State
 Write-Host "空きチェック登録完了。毎時0分に実行され、新しい空きがあればDiscordに通知されます。"
 
-# 集客0レッスンのコート取消（毎日 朝9時）
-$actionCancel = New-ScheduledTaskAction -Execute "F:\dev\netaichi\.venv\Scripts\python.exe" `
-    -Argument "-m netaichi cancel --headless" -WorkingDirectory "F:\dev\netaichi"
+# 旧タスク（cancel単体）が残っていれば削除する
+try { Unregister-ScheduledTask -TaskName "netaichi-cancel" -Confirm:$false -ErrorAction Stop } catch {}
 
-$triggerCancel = New-ScheduledTaskTrigger -Daily -At 9:00AM
+# 毎日の処理（毎日 朝9時）: prune（練習埋まりでレッスン削除）→ cancel（0人でコート取消）
+$actionDaily = New-ScheduledTaskAction -Execute "F:\dev\netaichi\.venv\Scripts\python.exe" `
+    -Argument "-m netaichi daily --headless" -WorkingDirectory "F:\dev\netaichi"
 
-$settingsCancel = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 30) -StartWhenAvailable
+$triggerDaily = New-ScheduledTaskTrigger -Daily -At 9:00AM
 
-Register-ScheduledTask -TaskName "netaichi-cancel" -Action $actionCancel -Trigger $triggerCancel `
-    -Settings $settingsCancel -Description "翌日の集客0レッスンのコート取消＋テニスベア募集削除→Discord通知" -Force
+$settingsDaily = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 30) -StartWhenAvailable
 
-Get-ScheduledTask -TaskName "netaichi-cancel" | Select-Object TaskName, State
-Write-Host "コート取消登録完了。毎日朝9時に翌日の集客0レッスンを取消します。"
+Register-ScheduledTask -TaskName "netaichi-daily" -Action $actionDaily -Trigger $triggerDaily `
+    -Settings $settingsDaily -Description "毎日朝9時: 練習埋まりでレッスン削除→翌日0人でコート取消＋募集削除→Discord通知" -Force
+
+Get-ScheduledTask -TaskName "netaichi-daily" | Select-Object TaskName, State
+Write-Host "毎日処理の登録完了。毎日朝9時に prune→cancel を実行します。"

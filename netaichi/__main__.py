@@ -53,6 +53,13 @@ def main():
         "--headless", action="store_true", help="ブラウザ画面を表示せず実行（定期実行用）"
     )
 
+    p_daily = sub.add_parser(
+        "daily", help="毎日の処理: prune（練習埋まりでレッスン削除）→ cancel（0人でコート取消）",
+    )
+    p_daily.add_argument(
+        "--headless", action="store_true", help="ブラウザ画面を表示せず実行（定期実行用）"
+    )
+
     args = parser.parse_args()
 
     match args.command:
@@ -99,6 +106,15 @@ def main():
             print(f"{action}: {len(result)}件")
             for ev in result:
                 print(f"  {ev['date']:%m/%d} {ev['start']}時 {ev['court']}")
+        case "daily":
+            # 順序が重要: 先にprune（練習ありのレッスンを消す）→後にcancel
+            # （逆だと練習で使うコートをcancelが取り消してしまう恐れがある）
+            from netaichi.services import cancel, prune
+
+            pruned = prune.run(headless=args.headless)
+            print(f"prune 削除: {len(pruned)}件")
+            cancelled = cancel.run(headless=args.headless)
+            print(f"cancel 取消・削除: {len(cancelled)}件")
 
 
 if __name__ == "__main__":
