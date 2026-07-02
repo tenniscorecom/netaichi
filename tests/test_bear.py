@@ -1,9 +1,14 @@
-"""bear の純粋ロジック（枠分割・コート照合・イベント変換）のテスト"""
+"""bear の純粋ロジック（枠分割・コート照合・イベント変換・掲載判定）のテスト"""
 from datetime import datetime
 
 import pandas as pd
 
-from netaichi.services.bear import match_court, reservations_to_events, split_slots
+from netaichi.services.bear import (
+    match_court,
+    reservations_to_events,
+    select_events_to_post,
+    split_slots,
+)
 
 CONF = {
     "event_hours": 2,
@@ -79,3 +84,38 @@ class TestReservationsToEvents:
 
     def test_empty_df(self):
         assert reservations_to_events(pd.DataFrame(), CONF) == []
+
+
+class TestSelectEventsToPost:
+    TODAY = datetime(2026, 7, 2)
+
+    def _event(self, day, start):
+        return {
+            "court": "大高緑地",
+            "bear_court": "大高緑地",
+            "date": datetime(2026, 10, day),
+            "start": start,
+            "end": start + 2,
+        }
+
+    def test_excludes_already_posted(self):
+        events = [self._event(3, 9), self._event(3, 13)]
+        existing = {(datetime(2026, 10, 3), 9)}  # 9時枠はテニスベアに掲載済み
+        result = select_events_to_post(events, existing, today=self.TODAY)
+        assert len(result) == 1
+        assert result[0]["start"] == 13
+
+    def test_excludes_past(self):
+        events = [
+            {"court": "大高緑地", "bear_court": "大高緑地",
+             "date": datetime(2026, 6, 1), "start": 9, "end": 11},  # 過去
+            self._event(3, 9),
+        ]
+        result = select_events_to_post(events, set(), today=self.TODAY)
+        assert len(result) == 1
+        assert result[0]["date"] == datetime(2026, 10, 3)
+
+    def test_all_new(self):
+        events = [self._event(3, 9), self._event(4, 13)]
+        result = select_events_to_post(events, set(), today=self.TODAY)
+        assert len(result) == 2

@@ -64,6 +64,29 @@ class TennisBear(ChromeBrowser):
         self.logger.info("テニスベアにログインしました")
         return True
 
+    def list_existing_events(self) -> set:
+        """テニスベアの作成済みイベントの (開始日, 開始時) 集合を返す
+
+        「過去のイベントをコピー」ダイアログのイベント一覧
+        （タイトルと "2026/9/28(月) 19:00" 形式の日時）から抽出する。
+        """
+        self.go_page(f"{self.BASE_URL}/event/create")
+        self._wait_render(5)
+        if not self._click_button_by_text("過去のイベントをコピー"):
+            return set()
+        self._wait_render(2)
+        dialogs = self.__visible(".v-dialog")
+        if not dialogs:
+            self.logger.error("コピー元一覧ダイアログが開きませんでした")
+            return set()
+
+        existing = set()
+        pattern = r"(\d{4})/(\d{1,2})/(\d{1,2})\([月火水木金土日]\)\s*(\d{1,2}):(\d{2})"
+        for m in re.finditer(pattern, dialogs[-1].text):
+            y, mo, d, h, _ = map(int, m.groups())
+            existing.add((datetime(y, mo, d), h))
+        return existing
+
     def create_event_from_template(
         self,
         template_title: str,

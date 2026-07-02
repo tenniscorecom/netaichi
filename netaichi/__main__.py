@@ -58,10 +58,11 @@ def main():
         case "bear":
             from netaichi.services.bear import run
 
-            posted = run(submit=True if args.submit else None)
-            print(f"募集作成: {len(posted)}件")
-            for ev in posted:
-                print(ev)
+            events = run(submit=True if args.submit else None)
+            action = "作成" if args.submit else "作成対象（未掲載・確認のみ）"
+            print(f"{action}: {len(events)}件")
+            for ev in events:
+                print(f"  {ev['date']:%m/%d} {ev['start']}-{ev['end']}時 {ev['bear_court']}（{ev['court']}）")
 
 
 if __name__ == "__main__":

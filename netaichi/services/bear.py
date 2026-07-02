@@ -1,7 +1,8 @@
 """テニスベア募集自動作成。
 
-ネットあいちの予約確定データを2時間枠に分割し、
-未掲載分をテニスベアの「過去のイベントをコピー」機能で募集作成する。
+ネットあいちの予約確定データを2時間枠に分割し、テニスベアに未掲載の枠だけ
+「過去のイベントをコピー」機能で募集作成する。
+二重掲載の判定は、テニスベアの実際の掲載状況（コピー元一覧の日時）で行う。
 """
 from datetime import datetime, timedelta
 
@@ -10,10 +11,7 @@ import yaml
 
 from netaichi.browser.tennisbear import TennisBear
 from netaichi.config import IS_HEADLESS, RULES_DIR
-from netaichi.db import NetaichiDatabase, T_BearPost, select
 from netaichi.services.reserve import collect_reservations
-
-db = NetaichiDatabase(False)
 
 
 def load_rules() -> dict:
@@ -61,43 +59,35 @@ def reservations_to_events(df: pd.DataFrame, conf: dict) -> list[dict]:
     return events
 
 
-def filter_new(events: list[dict]) -> list[dict]:
-    """未掲載かつ未来のイベント枠だけ返す"""
-    db.create_tables()
-    today = datetime.today()
-    new = []
-    with db.session() as session:
-        for ev in events:
-            if ev["date"] < today.replace(hour=0, minute=0, second=0, microsecond=0):
-                continue
-            exists = session.exec(
-                select(T_BearPost).where(
-                    T_BearPost.court == ev["court"],
-                    T_BearPost.date == ev["date"],
-                    T_BearPost.start == ev["start"],
-                )
-            ).first()
-            if exists is None:
-                new.append(ev)
-    return new
+def select_events_to_post(
+    events: list[dict], existing: set, today: datetime | None = None
+) -> list[dict]:
+    """未来かつテニスベア未掲載の枠だけ返す（純粋関数）
 
-
-def record_post(ev: dict):
-    with db.session() as session:
-        session.add(
-            T_BearPost(
-                court=ev["court"], date=ev["date"], start=ev["start"], end=ev["end"]
-            )
-        )
-        session.commit()
+    existing: テニスベアの既存募集 (開始日, 開始時) の集合
+    """
+    if today is None:
+        today = datetime.today()
+    midnight = today.replace(hour=0, minute=0, second=0, microsecond=0)
+    result = []
+    for ev in events:
+        if ev["date"] < midnight:
+            continue
+        if (ev["date"], ev["start"]) in existing:
+            continue
+        result.append(ev)
+    return result
 
 
 def run(submit: bool | None = None) -> list[dict]:
-    """予約確定データから未掲載分の募集をテニスベアに作成する
+    """ネットあいちの予約のうち、テニスベアに未掲載の枠を募集作成する
 
     Args:
         submit: Noneの場合は bear_rules.yaml の設定に従う。
-                Falseは確認モード（確定ボタンを押さない）
+                Falseは確認モード（作成対象を返すが実際には作成しない）
+
+    Returns:
+        作成対象（＝ネットあいちにあってテニスベアにない）枠のリスト
     """
     conf = load_rules()
     if submit is None:
@@ -105,27 +95,27 @@ def run(submit: bool | None = None) -> list[dict]:
 
     df = collect_reservations()
     events = reservations_to_events(df, conf)
-    new = filter_new(events)
-    if not new:
+    if not events:
         return []
 
-    posted = []
     with TennisBear(IS_HEADLESS) as tb:
         if not tb.login():
             raise RuntimeError("テニスベアへのログインに失敗しました")
-        for ev in new:
-            start_dt = ev["date"].replace(hour=ev["start"], minute=0)
-            end_dt = ev["date"].replace(hour=ev["end"], minute=0)
-            deadline = start_dt - timedelta(days=conf["deadline_days_before"])
-            ok = tb.create_event_from_template(
-                template_title=conf["template_title"],
-                court_name=ev["bear_court"],
-                start=start_dt,
-                end=end_dt,
-                deadline=deadline,
-                submit=submit,
-            )
-            if ok and submit:
-                record_post(ev)
-                posted.append(ev)
-    return posted
+        existing = tb.list_existing_events()
+        new = select_events_to_post(events, existing)
+
+        if submit:
+            for ev in new:
+                start_dt = ev["date"].replace(hour=ev["start"], minute=0)
+                end_dt = ev["date"].replace(hour=ev["end"], minute=0)
+                deadline = start_dt - timedelta(days=conf["deadline_days_before"])
+                if not tb.create_event_from_template(
+                    template_title=conf["template_title"],
+                    court_name=ev["bear_court"],
+                    start=start_dt,
+                    end=end_dt,
+                    deadline=deadline,
+                    submit=True,
+                ):
+                    tb.logger.warning(f"作成に失敗しました: {ev}")
+    return new

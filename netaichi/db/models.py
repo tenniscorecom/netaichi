@@ -71,16 +71,6 @@ class T_AvailableSlot(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
 
 
-class T_BearPost(SQLModel, table=True):
-    """テニスベアに募集を掲載済みの枠（二重掲載防止用）"""
-    court: str
-    date: datetime
-    start: int
-    end: int
-    created_at: datetime = Field(default_factory=datetime.now, nullable=False)
-    id: Optional[int] = Field(default=None, primary_key=True)
-
-
 class SessionFactory:
 
     @classmethod
