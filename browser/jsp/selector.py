@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 
 @dataclass
-class Selecter:
+class Selector:
     # GO
     GO_LOGIN = "#login"
     GO_MYPAGE = 'table[width="850"] td>a'  # [1]
@@ -31,7 +31,7 @@ class Selecter:
     BTN_COURT = 'input[value="対象館一覧を表示"]'
     BTN_AREA = 'input[value="施設決定"]'
     BTN_APPLY = 'input[value="申込みを確定する"]'
-    BTN_CECHK = 'input[value="抽選内容を確認する"]'
+    BTN_CHECK = 'input[value="抽選内容を確認する"]'
     BTN_CONFIRM = 'input[value="抽選を申込む"]'
     BTN_DELETE = 'input[value="取消"]'
     BTN_RESELECT_DATE = 'input[value="日時を選びなおす"]'

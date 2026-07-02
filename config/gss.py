@@ -1,7 +1,10 @@
+import os
 
+from dotenv import load_dotenv
 
-KOMADA_GSS_ID = '13Y4QvkJQAaAkr96B891gwITSPvYuZYWfJS59dsr9mkw'
-OGURI_GSS_ID = '1T7uT9k9_7oYaIZ23TUxw7HasTZLu1UZRj3Qr6McrkNA'
+load_dotenv()
 
+OGURI_GSS_ID = os.environ['OGURI_GSS_ID']
+KOMADA_GSS_ID = os.environ['KOMADA_GSS_ID']
 
 JSON_PATH = 'authorized_user.json'

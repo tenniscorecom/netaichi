@@ -1,25 +1,12 @@
-default_pw = 'pete0812'
-OGURI_ACCOUNT_ID = '01111102'
-KOMADA_ACCOUNT_ID = '01007510'
+import os
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+default_pw = os.environ['NETAICHI_DEFAULT_PW']
+OGURI_ACCOUNT_ID = os.environ['OGURI_ACCOUNT_ID']
+KOMADA_ACCOUNT_ID = os.environ['KOMADA_ACCOUNT_ID']
 
 IS_HEADLESS = False
 DB_PATH = 'netaichi2024'
-
-
-WEEKEND_VALUES = {
-    OGURI_ACCOUNT_ID: [
-        {
-            'value': 130,
-            'start': 9,
-            'end': 13,
-            'amount': 1,
-        },
-        {
-            'value': 130,
-            'start': 13,
-            'end': 17,
-            'amount': 1,
-        },
-
-    ]
-}

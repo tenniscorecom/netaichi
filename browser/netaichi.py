@@ -1,13 +1,11 @@
 from .jsp import Jsp
-from .jsp.selecter import Selecter
-from database import NetaichiDatabase, M_CourtProperty, M_Account, T_LotteryData
-from sqlmodel import delete, select, SQLModel
+from .jsp.selector import Selector
+from database import NetaichiDatabase, M_CourtProperty, T_LotteryData
+from sqlmodel import delete, select
 import pandas as pd
 from datetime import datetime as dd
 import re
-from .jsp.data import LotteryStatusDetail
-from helper import sqmodel_to_df
-from dataclasses import asdict
+from helper import sqlmodel_to_df
 from config import IS_HEADLESS
 
 
@@ -44,22 +42,20 @@ class NetAichi(Jsp):
                 span = 2
                 try:
                     if self.select.time(g.start, g.end, span):
-                        self.click(Selecter.BTN_APPLY)
+                        self.click(Selector.BTN_APPLY)
                         self.select.sports()
                         self.select.players(4)
-                        self.click(Selecter.BTN_CECHK)
-                        # self.wait_element_load_by_css(Selecter.LOTTERY_CHECK_COURT)
-                        if not self.__check_lottery(g, value, span):
+                        self.click(Selector.BTN_CHECK)
+                        if not self.__check_lottery(g):
                             continue
-                        self.click(Selecter.BTN_CONFIRM)
+                        self.click(Selector.BTN_CONFIRM)
                         self.alert_switch(True)
-                        if self.get_element_by_css(Selecter.LOGIN_ERROR_MESSAGE):
-                            self.click(Selecter.BTN_RESELECT_DATE)
+                        if self.get_element_by_css(Selector.LOGIN_ERROR_MESSAGE):
+                            self.click(Selector.BTN_RESELECT_DATE)
                         else:
-                            self.click(Selecter.BTN_ANOTHER_DATE)
+                            self.click(Selector.BTN_ANOTHER_DATE)
                     else:
-                        print(g)
-                        print("time False")
+                        self.logger.warning(f"時間帯を選択できませんでした: {g}")
                 except Exception as e:
                     self.logger.error(f"Error adding lottery: {e}")
 
@@ -72,7 +68,7 @@ class NetAichi(Jsp):
                 )
             ).all()
 
-        df = sqmodel_to_df(lottery_data)
+        df = sqlmodel_to_df(lottery_data)
 
         for value, group in df.groupby("value"):
             self.go.mypage().lottery()
@@ -86,61 +82,51 @@ class NetAichi(Jsp):
                 span = 2
 
                 if self.select.time(g.start, g.end, span):
-                    self.click(Selecter.BTN_APPLY)
+                    self.click(Selector.BTN_APPLY)
                     self.select.sports()
                     self.select.players(players)
-                    self.click(Selecter.BTN_CECHK)
-                    # self.wait_element_load_by_css(Selecter.LOTTERY_CHECK_COURT)
-                    if not self.__check_lottery(g, value, span):
+                    self.click(Selector.BTN_CHECK)
+                    if not self.__check_lottery(g):
                         continue
-                    self.click(Selecter.BTN_CONFIRM)
+                    self.click(Selector.BTN_CONFIRM)
                     self.alert_switch(True)
-                    if self.get_element_by_css(Selecter.LOGIN_ERROR_MESSAGE):
-                        self.click(Selecter.BTN_RESELECT_DATE)
+                    if self.get_element_by_css(Selector.LOGIN_ERROR_MESSAGE):
+                        self.click(Selector.BTN_RESELECT_DATE)
                     else:
-                        self.click(Selecter.BTN_ANOTHER_DATE)
+                        self.click(Selector.BTN_ANOTHER_DATE)
                 else:
-                    print(g)
-                    print("time False")
+                    self.logger.warning(f"時間帯を選択できませんでした: {g}")
                 status = self.get.lottery_status()
                 if status.alltime == "810":
                     break
-        print(self.get.lottery_status())
-        print(self.get.lottery_status_detaill())
-        print("-" * 30)
+        self.logger.info(self.get.lottery_status())
+        self.logger.info(self.get.lottery_status_detail())
 
-    def __check_lottery(self, data: T_LotteryData, value, span):
-        court_name = self.get_element_by_css(Selecter.LOTTERY_CHECK_COURT).text
-        # amount = self.get_element_by_css(Selecter.LOTTERY_CHECK_AMOUNT).text
-        d = self.get_element_by_css(Selecter.LOTTERY_CHECK_DATE).text
+    def __check_lottery(self, data: T_LotteryData) -> bool:
+        """抽選確認画面の表示内容が申込データと一致するか検証する"""
+        court_name = self.get_element_by_css(Selector.LOTTERY_CHECK_COURT).text
+        d = self.get_element_by_css(Selector.LOTTERY_CHECK_DATE).text
         ds = d.split()
         date = dd.strptime(ds[0][:-3], "%Y年%m月%d日")
         times = re.findall(r"([0-9]{1,2})時", d)
         start = int(times[0])
         end = int(times[1])
+        page_value = self.to_value(court_name)
 
-        case = None
+        cause = None
         if start != data.start:
-            cause = "start"
+            cause = "開始時刻"
             error_message = f"{data.value} {date} > {data.start} != {start}"
-
         if end != data.end:
-            cause = "end"
+            cause = "終了時刻"
             error_message = f"{data.value} {date} > {data.end} != {end}"
-
-        if value != data.value:
+        if page_value != data.value:
             cause = "コート"
-            error_message = f"{data.value} != {value}"
+            error_message = f"{data.value} != {page_value} ({court_name})"
 
-        # if amount != lottery.amount:
-        #     self.logger.error(
-        #         f'面数ミス{self.logged_account} : {lottery.amount} != {amount}'
-        #     )
-        #     flag = True
-
-        if case:
+        if cause:
             self.logger.error(f"{cause}指定ミス {self.logged_account} {error_message}")
-            self.click(Selecter.BTN_RESELECT_DATE)
+            self.click(Selector.BTN_RESELECT_DATE)
             return False
         return True
 
@@ -153,7 +139,7 @@ class NetAichi(Jsp):
             if p.name == court_name:
                 return p.value
 
-    def update_court_propreties(self) -> list[M_CourtProperty]:
+    def update_court_properties(self) -> list[M_CourtProperty]:
         with self.db.session() as session:
             courts = session.exec(select(M_CourtProperty)).all()
             if courts == []:
@@ -195,6 +181,7 @@ class NetAichi(Jsp):
                     T_LotteryData.created_at >= self.today,
                 )
             )
-            new_lotterys = [T_LotteryData(**lottery) for lottery in self.get.lottery()]
-            session.add_all(new_lotterys)
+            new_lotteries = [T_LotteryData(**lottery) for lottery in self.get.lottery()]
+            session.add_all(new_lotteries)
             session.commit()
+            return new_lotteries

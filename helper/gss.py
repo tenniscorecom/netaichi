@@ -18,13 +18,13 @@ class SpreadSheet:
         credentials = ServiceAccountCredentials.from_json_keyfile_name(
             Keyfile, scope)
         self.client = gspread.authorize(credentials)
-        self.wrokbook_id = id
+        self.workbook_id = id
         self.open_workbook()
 
     def open_workbook(self):
-        self.WORKBOOK = self.client.open_by_key(self.wrokbook_id)
+        self.WORKBOOK = self.client.open_by_key(self.workbook_id)
         self.account_sheet = self.WORKBOOK.worksheet(Sheets.ACCOUNT)
-        self.reseve_sheet = self.WORKBOOK.worksheet(Sheets.RESERVE)
+        self.reserve_sheet = self.WORKBOOK.worksheet(Sheets.RESERVE)
         return self.WORKBOOK
 
     def __to_maccount(self, df: pd.DataFrame) -> list[M_Account]:

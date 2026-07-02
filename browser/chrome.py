@@ -14,7 +14,7 @@ from selenium.webdriver import Chrome as WebDriver
 
 # 自作モジュール
 from config import OPTIONS
-from helper import AppLogger, randam_sleep
+from helper import AppLogger, random_sleep
 
 
 class ChromeBrowser:
@@ -24,7 +24,7 @@ class ChromeBrowser:
         self.driver = None
         self.is_headless = is_headless
         self.logger = AppLogger(logger_name)
-        self.wait = WebDriverWait(self.driver, 10)
+        self.wait = None
 
     def __enter__(self):
         self.new()
@@ -37,12 +37,11 @@ class ChromeBrowser:
     def new(self) -> WebDriver:
         # ------ ChromeDriver のオプション ------
         options = webdriver.ChromeOptions()
-        # configs.selenuimでオプション設定
-        if self.is_headless:
-            # ヘッドレスモードで起動する。
-            OPTIONS + ("--headless=new")
+        # config.seleniumでオプション設定
         for o in OPTIONS:
             options.add_argument(o)
+        if self.is_headless:
+            options.add_argument("--headless=new")
         # Chromeは自動テスト ソフトウェア~~ ｜ コンソールに表示されるエラー　を非表示
         options.add_experimental_option(
             "excludeSwitches", ["enable-automation", "enable-logging"]
@@ -50,13 +49,14 @@ class ChromeBrowser:
         # 暗黙の待機タイムアウト
         options.timeouts = {"implicit": 5000}
         self.driver = webdriver.Chrome(options=options)
+        self.wait = WebDriverWait(self.driver, 10)
         return self.driver
 
     def quit(self) -> None:
         if self.driver:
             self.driver.quit()
 
-    @randam_sleep
+    @random_sleep
     def go_page(self, url: str) -> None:
         self.driver.get(url)
         self.driver.execute_script(
@@ -113,7 +113,7 @@ class ChromeBrowser:
     def get_elements_by_xpath(self, xpath, base: WebElement | None = None):
         return self.get_elements(xpath, By.XPATH, base)
 
-    @randam_sleep
+    @random_sleep
     def get_html(self) -> BeautifulSoup:
         return BeautifulSoup(self.driver.page_source, "lxml")
 
@@ -130,7 +130,7 @@ class ChromeBrowser:
     def select_by_visible_text(self, select_element: WebElement, text: str) -> None:
         Select(select_element).select_by_visible_text(text)
 
-    @randam_sleep
+    @random_sleep
     def send_form(self, selector, value):
         form = self.get_element_by_css(
             selector,
@@ -148,15 +148,15 @@ class ChromeBrowser:
     def select_pulldown(self, selector: str, index: int):
         self.select_by_index(self.get_element_by_css(selector), index - 1)
 
-    @randam_sleep
-    def click(self, selector, index=0):
+    @random_sleep
+    def click(self, selector, index=0) -> bool:
         ele = self.get_element_by_css(selector, index)
         if ele is None:
             return False
-        else:
-            ele.click()
+        ele.click()
+        return True
 
-    @randam_sleep
+    @random_sleep
     def alert_switch(self, bool: bool):
         self.wait_alert(3)
         if bool is True:
@@ -170,11 +170,11 @@ class ChromeBrowser:
     def wait_element_load_by_css(self, selector):
         self.wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
 
-    @randam_sleep
+    @random_sleep
     def js_exec(self, code: str) -> None:
         self.driver.execute_script(code)
 
-    @randam_sleep
+    @random_sleep
     def drag_and_drop(self, source: WebElement, target: str) -> None:
         """ドラッグアンドドロップする関数
 
@@ -186,7 +186,7 @@ class ChromeBrowser:
         actions.drag_and_drop(source, target)
         actions.perform()
 
-    @randam_sleep
+    @random_sleep
     def scroll_into_view(self, target: str, block: str = "start") -> None:
         """要素が可視範囲までスクロールする関数
 

@@ -26,4 +26,4 @@ def reserve():
                     temp = pd.concat([temp, reserve_df])
         temp.to_csv('./df.csv', header=True, index=False)
     ss = SpreadSheet(OGURI_GSS_ID)
-    ss.replace_all(ss.reseve_sheet, temp)
+    ss.replace_all(ss.reserve_sheet, temp)

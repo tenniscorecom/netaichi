@@ -1,5 +1,3 @@
-
-
 if __name__ == '__main__':
     import sys
     arg = sys.argv[1]
@@ -17,11 +15,5 @@ if __name__ == '__main__':
         case 'o':
             from bot import oguri
             oguri()
-
-        # case 'd':
-        #     draw()
-        case 't':
-            from bot.test import test
-            test()
-        # case _:
-        #     pass
+        case _:
+            print(f"不明なコマンド: {arg}（init / r / k / o のいずれか）")

@@ -1,4 +1,4 @@
-def randam_sleep(func):
+def random_sleep(func):
     from time import sleep
     from random import uniform
 

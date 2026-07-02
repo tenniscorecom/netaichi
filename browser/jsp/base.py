@@ -6,7 +6,7 @@ from browser.chrome import ChromeBrowser
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from config.netaichi import default_pw
-from .selecter import Selecter
+from .selector import Selector
 from .message import SystemMessage, ErrorMessage
 from collections.abc import Generator
 
@@ -40,8 +40,8 @@ class Jsp(ChromeBrowser):
         account: M_Account = None,
     ) -> bool:
         def send_login_form():
-            self.send_form(Selecter.LOGIN_ID, account.id)
-            self.send_form(Selecter.LOGIN_PW, account.password)
+            self.send_form(Selector.LOGIN_ID, account.id)
+            self.send_form(Selector.LOGIN_PW, account.password)
 
         if account is None:
             account = M_Account(name=name, id=id, password=password)
@@ -53,9 +53,9 @@ class Jsp(ChromeBrowser):
                 self.logout()
         self.go.login()
         send_login_form()
-        self.click(Selecter.BTN_LOGIN)
+        self.click(Selector.BTN_LOGIN)
         self.driver.implicitly_wait(3)
-        error_message = self.get.error_message(Selecter.LOGIN_ERROR_MESSAGE)
+        error_message = self.get.error_message(Selector.LOGIN_ERROR_MESSAGE)
         match error_message:
             case SystemMessage.ERROR_BOT:
                 send_login_form()
@@ -78,7 +78,7 @@ class Jsp(ChromeBrowser):
 
     def logout(self) -> bool:
         if self.is_logged:
-            self.click(Selecter.BTN_LOGOUT)
+            self.click(Selector.BTN_LOGOUT)
             self.logged_account = None
             return True
         return False

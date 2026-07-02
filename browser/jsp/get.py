@@ -1,5 +1,5 @@
 from .message import InfoMessage, ErrorMessage
-from .selecter import Selecter
+from .selector import Selector
 from .data import LotteryStatusDetail, LotteryStatus
 from database import T_LotteryData
 from unicodedata import normalize
@@ -43,8 +43,8 @@ class JspGet:
                     )
                 temp |= {"start": start, "end": end, "span": span}
                 courts.append(temp)
-                self.jsp.click(Selecter.BTN_REVERSE)
-                self.jsp.click(Selecter.BTN_REVERSE2)
+                self.jsp.click(Selector.BTN_REVERSE)
+                self.jsp.click(Selector.BTN_REVERSE2)
         return courts
 
     def reservation(self) -> pd.DataFrame:
@@ -54,8 +54,8 @@ class JspGet:
         temp = []
         for i in self.jsp.go.reservation_list():
             soup = self.jsp.get_html()
-            dates = soup.select(Selecter.RESERVE_DATA_DATE)
-            courts = soup.select(Selecter.RESERVE_DATA_COURT)
+            dates = soup.select(Selector.RESERVE_DATA_DATE)
+            courts = soup.select(Selector.RESERVE_DATA_COURT)
             if len(dates) != len(courts):
                 raise RuntimeError(ErrorMessage.RESERVATION_DATA)
             for i in range(len(dates)):
@@ -87,11 +87,11 @@ class JspGet:
         temp = []
         for _ in self.jsp.go.lottery_list():
             soup = self.jsp.get_html()
-            dates = soup.select(Selecter.LOTTERY_DATA_DATE)
-            starts = soup.select(Selecter.LOTTERY_DATA_START)
-            ends = soup.select(Selecter.LOTTERY_DATA_END)
-            courts = soup.select(Selecter.LOTTERY_DATA_COURT)
-            amounts = soup.select(Selecter.LOTTERY_DATA_AMOUNT)
+            dates = soup.select(Selector.LOTTERY_DATA_DATE)
+            starts = soup.select(Selector.LOTTERY_DATA_START)
+            ends = soup.select(Selector.LOTTERY_DATA_END)
+            courts = soup.select(Selector.LOTTERY_DATA_COURT)
+            amounts = soup.select(Selector.LOTTERY_DATA_AMOUNT)
             for i in range(len(dates)):
                 date = self.jsp.to_datetime(dates[i].text[:-3])
                 start = starts[i].text.removesuffix("時")
@@ -104,7 +104,6 @@ class JspGet:
                         date, court_name, start, end, amount
                     )
                 )
-                print(value)
                 temp.append(
                     {
                         "value": value,
@@ -126,17 +125,16 @@ class JspGet:
 
     def __get_amount(self) -> list[int]:
         self.jsp.go.mypage()
-        eles = self.jsp.get_elements_by_css(Selecter.AMOUNT_RESERVE)
+        eles = self.jsp.get_elements_by_css(Selector.AMOUNT_RESERVE)
         if eles:
             return [int(e.text) for e in eles]
-        else:
-            raise "not get mypage amount"
+        raise RuntimeError("マイページの予約・抽選件数を取得できませんでした")
 
     def lottery_status(self) -> LotteryStatus:
         self.jsp.go.lottery()
-        alltime = self.jsp.get_element_by_css(Selecter.STATUS_ALL).text
-        zone = self.jsp.get_element_by_css(Selecter.STATUS_ZONE).text
-        count = self.jsp.get_element_by_css(Selecter.STATUS_COUNT).text
+        alltime = self.jsp.get_element_by_css(Selector.STATUS_ALL).text
+        zone = self.jsp.get_element_by_css(Selector.STATUS_ZONE).text
+        count = self.jsp.get_element_by_css(Selector.STATUS_COUNT).text
         status = LotteryStatus(
             count=count,
             zone=zone,
@@ -146,7 +144,7 @@ class JspGet:
 
         return status
 
-    def lottery_status_detaill(self):
+    def lottery_status_detail(self):
         """
         [name,count,value=0],....
         """
@@ -175,8 +173,8 @@ class JspGet:
     def expiration_date(self):
         pass
 
-    def error_message(self, selecter) -> None | str:
-        em = self.jsp.get_element_by_css(selecter)
+    def error_message(self, selector) -> None | str:
+        em = self.jsp.get_element_by_css(selector)
         if not em:
             return None
         return em.text
@@ -184,7 +182,7 @@ class JspGet:
     def times(self):
         times = [
             int(normalize("NFKC", time.text[:-2]))
-            for time in self.jsp.get_elements_by_css(Selecter.TIMES)
+            for time in self.jsp.get_elements_by_css(Selector.TIMES)
         ]
 
         return times
