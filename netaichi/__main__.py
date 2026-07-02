@@ -33,6 +33,16 @@ def main():
         help="確定まで実行する（未指定時は bear_rules.yaml の submit 設定に従う）",
     )
 
+    p_cancel = sub.add_parser(
+        "cancel", help="翌日の集客0レッスンのコートを取消し、募集も削除"
+    )
+    p_cancel.add_argument(
+        "--dry-run", action="store_true", help="検出のみ（取消・削除しない）"
+    )
+    p_cancel.add_argument(
+        "--headless", action="store_true", help="ブラウザ画面を表示せず実行（定期実行用）"
+    )
+
     args = parser.parse_args()
 
     match args.command:
@@ -63,6 +73,14 @@ def main():
             print(f"{action}: {len(events)}件")
             for ev in events:
                 print(f"  {ev['date']:%m/%d} {ev['start']}-{ev['end']}時 {ev['bear_court']}（{ev['court']}）")
+        case "cancel":
+            from netaichi.services.cancel import run
+
+            result = run(execute=not args.dry_run, headless=args.headless)
+            action = "検出" if args.dry_run else "取消・削除"
+            print(f"{action}: {len(result)}件")
+            for ev in result:
+                print(f"  {ev['date']:%m/%d} {ev['start']}時 {ev['court']}")
 
 
 if __name__ == "__main__":

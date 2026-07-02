@@ -2,9 +2,11 @@ from .pages import Jsp
 from .pages.selector import Selector
 from netaichi.db import NetaichiDatabase, M_CourtProperty, T_LotteryData
 from sqlmodel import delete, select
+from selenium.webdriver.common.by import By
 import pandas as pd
 from datetime import datetime as dd
 import re
+import time
 from netaichi.helper import sqlmodel_to_df
 from netaichi.config import IS_HEADLESS
 
@@ -236,6 +238,57 @@ class NetAichi(Jsp):
             if not soup.select("#goNextPager"):
                 break
         return slots
+
+    def cancel_reservation(self, date: dd, start: int, court_keyword: str) -> bool:
+        """予約状況の一覧から (日付, 開始時, コート) 一致の予約を取り消す
+
+        「取消」ボタン押下で出る確認ダイアログをOKして確定する。
+        キャンセル限界日を過ぎていると取消ボタンが無く、Falseを返す。
+        """
+        self.go.mypage()
+        link = self.get_element_by_contains_text("//a", "予約状況の一覧")
+        if link is None:
+            self.logger.error("「予約状況の一覧」リンクが見つかりません")
+            return False
+        link.click()
+        time.sleep(2)
+
+        for page in range(1, 12):
+            buttons = self.get_elements_by_css('input[value="選択"]')
+            for btn in buttons:
+                tr = btn.find_element(By.XPATH, "./ancestor::tr[1]")
+                txt = " ".join(tr.text.split())
+                m = re.search(r"(\d{4})年(\d{1,2})月(\d{1,2})日.*?(\d{1,2})時", txt)
+                if not m:
+                    continue
+                y, mo, d, h = map(int, m.groups())
+                if dd(y, mo, d) == date and h == start and court_keyword in txt:
+                    btn.click()
+                    time.sleep(2)
+                    cancel_btn = self.get_element_by_css('input[value="取消"]')
+                    if cancel_btn is None:
+                        self.logger.error(
+                            f"取消ボタンがありません（限界日超過の可能性）: "
+                            f"{date:%Y-%m-%d} {start}時 {court_keyword}"
+                        )
+                        return False
+                    cancel_btn.click()
+                    self.alert_switch(True)  # 確認ダイアログでOK＝取消確定
+                    time.sleep(2)
+                    self.logger.info(
+                        f"予約を取消しました: {date:%Y-%m-%d} {start}時 {court_keyword}"
+                    )
+                    return True
+            nxt = self.get_elements_by_css("#goNextPager")
+            if nxt and nxt[0].is_displayed():
+                self.js_exec(f"movePage({page + 1});")
+                time.sleep(2)
+            else:
+                break
+        self.logger.warning(
+            f"該当予約が見つかりません: {date:%Y-%m-%d} {start}時 {court_keyword}"
+        )
+        return False
 
     def to_value(self, court_name: str) -> int:
         if self.properties is None:
