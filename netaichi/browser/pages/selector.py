@@ -36,6 +36,8 @@ class Selector:
     BTN_DELETE = 'input[value="取消"]'
     BTN_RESELECT_DATE = 'input[value="日時を選びなおす"]'
     BTN_ANOTHER_DATE = 'input[value="別の日時を申込む"]'
+    # 抽選内容の確認画面から、確定せず設定画面へ戻るボタン
+    BTN_TO_SETTING = 'input[value="抽選申込内容設定画面へ"]'
     BTN_REVERSE = 'input[value="施設を選びなおす"]'
     BTN_REVERSE2 = 'input[value="条件の選びなおし"]'
     BTN_LOGOUT = 'input[value="ログアウト"]'

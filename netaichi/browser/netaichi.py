@@ -52,6 +52,8 @@ class NetAichi(Jsp):
                             continue
                         if self.dry_run:
                             self.logger.info(f"[dry-run] 確定せずスキップ: {g}")
+                            # 確認画面 → 設定画面 → 日時選択画面 の順に戻る
+                            self.click(Selector.BTN_TO_SETTING)
                             self.click(Selector.BTN_RESELECT_DATE)
                             continue
                         self.click(Selector.BTN_CONFIRM)
