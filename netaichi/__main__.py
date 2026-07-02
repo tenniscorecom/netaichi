@@ -43,6 +43,16 @@ def main():
         "--headless", action="store_true", help="ブラウザ画面を表示せず実行（定期実行用）"
     )
 
+    p_prune = sub.add_parser(
+        "prune", help="練習が埋まった枠のレッスン募集を削除"
+    )
+    p_prune.add_argument(
+        "--dry-run", action="store_true", help="検出のみ（削除しない）"
+    )
+    p_prune.add_argument(
+        "--headless", action="store_true", help="ブラウザ画面を表示せず実行（定期実行用）"
+    )
+
     args = parser.parse_args()
 
     match args.command:
@@ -78,6 +88,14 @@ def main():
 
             result = run(execute=not args.dry_run, headless=args.headless)
             action = "検出" if args.dry_run else "取消・削除"
+            print(f"{action}: {len(result)}件")
+            for ev in result:
+                print(f"  {ev['date']:%m/%d} {ev['start']}時 {ev['court']}")
+        case "prune":
+            from netaichi.services.prune import run
+
+            result = run(execute=not args.dry_run, headless=args.headless)
+            action = "検出" if args.dry_run else "削除"
             print(f"{action}: {len(result)}件")
             for ev in result:
                 print(f"  {ev['date']:%m/%d} {ev['start']}時 {ev['court']}")
