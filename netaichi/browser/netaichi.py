@@ -140,41 +140,99 @@ class NetAichi(Jsp):
             return False
         return True
 
-    def find_available_slots(self, courts: list[str], dates: list) -> list[dict]:
-        """予約申込画面から各コート・日付の空き時間帯を収集する
+    def find_available_slots(
+        self, park_keyword: str, dates: list, court_filter: list[str] | None = None
+    ) -> list[dict]:
+        """施設名検索の空き状況ページから、各日付の空き時間帯を収集する
 
-        ※時間帯チェックボックスが有効=空きあり、という抽選申込画面と
-          同じUI構造を前提にしている。実サイトでの動作確認が必要。
+        Args:
+            park_keyword: 施設名検索のキーワード（例: 大高緑地）
+            dates: チェック対象の日付リスト
+            court_filter: 施設名にこのいずれかを含むもののみ対象
+                          （テニス以外の野球場などを除外する）
         """
-        self.go.mypage().reservation()
+        if court_filter is None:
+            court_filter = ["庭球場", "テニス", "コート"]
+
+        if not self.__go_name_search():
+            self.logger.error("施設名検索ページに移動できませんでした")
+            return []
+        self.send_form("#textKeyword", park_keyword)
+        self.click('input[value="上記の内容で検索する"]')
+        if self.click('input[value="選択"]') is False:
+            self.logger.warning(f"施設が見つかりませんでした: {park_keyword}")
+            return []
+
         slots = []
-        for value in courts:
-            if self.select.court(value) is False:
-                self.logger.warning(f"コートを選択できませんでした: {value}")
-                continue
-            for date in dates:
-                try:
-                    self.go.change_calendar_date(date)
-                    times = self.get.times()
-                    if len(times) < 2:
-                        continue
-                    span = abs(times[0] - times[1])
-                    checkboxes = self.get_elements_by_css(Selector.SELECT_CHECKBOX)
-                    for i, cb in enumerate(checkboxes):
-                        if i < len(times) and cb.is_enabled():
-                            slots.append(
-                                {
-                                    "value": value,
-                                    "date": date,
-                                    "start": times[i],
-                                    "end": times[i] + span,
-                                }
-                            )
-                except Exception as e:
-                    self.logger.error(f"空き取得エラー {value} {date:%Y-%m-%d}: {e}")
-            # 施設選択画面へ戻る
-            self.click(Selector.BTN_REVERSE)
-            self.click(Selector.BTN_REVERSE2)
+        for date in dates:
+            try:
+                self.go.change_calendar_date(date)
+                slots += self.__parse_vacant_slots(park_keyword, date, court_filter)
+            except Exception as e:
+                self.logger.error(f"空き取得エラー {park_keyword} {date:%Y-%m-%d}: {e}")
+        return slots
+
+    def __go_name_search(self) -> bool:
+        """「施設名から探す」ページへ移動する（マイページ/検索系ページの両方に対応）"""
+        elements = self.get_elements_by_css("#goNameSearch")
+        if not elements:
+            elements = self.get_elements_by_contains_text("//a", "施設名から探す")
+        if not elements:
+            return False
+        elements[0].click()
+        return True
+
+    def __parse_vacant_slots(
+        self, park_keyword: str, date, court_filter: list[str]
+    ) -> list[dict]:
+        """表示中の空き状況ページ（全ページ分）から空き枠を抽出する
+
+        各時間帯セルの構造:
+          <td><div><img alt="空き"><input name="selectInfo"
+              value="館cd:施設cd:YYYYMMDD:...:0900:1000:..."></div></td>
+        """
+        slots = []
+        seen = set()
+        for page in range(1, 11):  # 無限ループ防止
+            if page > 1:
+                self.js_exec(f"movePage({page});")
+            soup = self.get_html()
+
+            # 施設cd → 施設名（サイドバーのチェックボックスから取得）
+            names = {}
+            for cb in soup.select('input[name="chkIcd"]'):
+                label = cb.find_parent("label")
+                if label:
+                    names[cb.get("value")] = label.get_text(strip=True)
+
+            for info in soup.select('input[name="selectInfo"]'):
+                parts = (info.get("value") or "").split(":")
+                if len(parts) < 6:
+                    continue
+                icd = parts[1]
+                start, end = parts[4], parts[5]
+                facility = names.get(icd, "")
+                if not any(f in facility for f in court_filter):
+                    continue
+                div = info.find_parent("div")
+                img = div.find("img") if div else None
+                if img is None or img.get("alt") != "空き":
+                    continue
+                key = (icd, start)
+                if key in seen:
+                    continue
+                seen.add(key)
+                slots.append(
+                    {
+                        "value": park_keyword,
+                        "date": date,
+                        "start": int(start) // 100,
+                        "end": int(end) // 100,
+                        "facility": facility,
+                    }
+                )
+            if not soup.select("#goNextPager"):
+                break
         return slots
 
     def to_value(self, court_name: str) -> int:

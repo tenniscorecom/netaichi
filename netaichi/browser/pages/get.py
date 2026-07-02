@@ -174,10 +174,11 @@ class JspGet:
         pass
 
     def error_message(self, selector) -> None | str:
-        em = self.jsp.get_element_by_css(selector)
-        if not em:
+        # メッセージが無いのは正常系なのでエラーログを出さない
+        elements = self.jsp.get_elements_by_css(selector)
+        if not elements:
             return None
-        return em.text
+        return elements[0].text
 
     def times(self):
         times = [

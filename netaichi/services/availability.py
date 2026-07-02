@@ -9,7 +9,6 @@ import yaml
 from dateutil.relativedelta import relativedelta
 
 from netaichi.browser import NetAichi
-from netaichi.browser.pages.data import COURT_NAMES
 from netaichi.config import IS_HEADLESS, RULES_DIR
 from netaichi.db import NetaichiDatabase, T_AvailableSlot, select
 from netaichi.notify import notify
@@ -37,6 +36,32 @@ def target_dates(conf: dict, today: datetime | None = None) -> list[datetime]:
             dates.append(d)
         d += timedelta(days=1)
     return dates
+
+
+def merge_hour_slots(slots: list[dict]) -> list[dict]:
+    """施設ごとの1時間刻みの空きを連続した時間帯にまとめ、
+    施設違いの同一時間帯は1件に重複排除する（純粋関数）"""
+    by_facility: dict = {}
+    for s in sorted(slots, key=lambda x: (x["value"], str(x["date"]), x.get("facility", ""), x["start"])):
+        key = (s["value"], s["date"], s.get("facility", ""))
+        ranges = by_facility.setdefault(key, [])
+        if ranges and ranges[-1]["end"] == s["start"]:
+            ranges[-1]["end"] = s["end"]
+        else:
+            ranges.append(
+                {"value": s["value"], "date": s["date"], "start": s["start"], "end": s["end"]}
+            )
+
+    merged = []
+    seen = set()
+    for ranges in by_facility.values():
+        for r in ranges:
+            key = (r["value"], r["date"], r["start"], r["end"])
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(r)
+    return merged
 
 
 def in_time_ranges(slot: dict, ranges: list) -> bool:
@@ -68,20 +93,24 @@ def format_message(slots: list[dict]) -> str:
     for s in sorted(slots, key=lambda x: (x["date"], x["start"])):
         date = s["date"]
         week = WEEKDAY_LABELS[date.weekday()]
-        court = COURT_NAMES.get(s["value"], s["value"])
-        lines.append(f"・{date:%m/%d}({week}) {s['start']}-{s['end']}時 {court}")
+        lines.append(f"・{date:%m/%d}({week}) {s['start']}-{s['end']}時 {s['value']}")
     return "\n".join(lines)
 
 
 def check(notify_enabled: bool = True) -> list[dict]:
     conf = load_rules()
     dates = target_dates(conf)
+    slots = []
     with NetAichi(IS_HEADLESS) as na:
         na.login(id=GROUP_IDS[conf["account"]])
-        slots = na.find_available_slots(conf["courts"], dates)
+        for park in conf["parks"]:
+            slots += na.find_available_slots(
+                park["keyword"], dates, park.get("court_filter")
+            )
 
-    slots = [s for s in slots if in_time_ranges(s, conf["times"])]
-    new = filter_new(slots)
+    merged = merge_hour_slots(slots)
+    merged = [s for s in merged if in_time_ranges(s, conf["times"])]
+    new = filter_new(merged)
     if new and notify_enabled:
         notify(format_message(new))
     return new

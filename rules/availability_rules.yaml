@@ -1,12 +1,21 @@
 # 空き状況チェックの条件
 #
 # account: チェックに使うアカウントグループ（lottery_rules.yaml と同じグループ名）
-# courts:  チェック対象コート（value）
+# parks:   チェック対象施設。keyword=施設名検索のキーワード、
+#          court_filter=施設名にこれを含むもののみ対象（テニス以外を除外）
 # days:    weekend_holiday（土日祝）または曜日リスト（月=0）
 # times:   この時間範囲に重なる空きを通知する
 # months_ahead: 何ヶ月先までチェックするか
 account: oguri
-courts: ["130", "180", "400", "410", "660"]
+parks:
+  - keyword: 大高緑地
+    court_filter: [庭球場]
+  - keyword: 小幡緑地
+    court_filter: [庭球場]
+  - keyword: 愛・地球博記念公園
+    court_filter: [テニス, フットサル]
+  - keyword: 愛知県森林公園
+    court_filter: [コート]
 days: weekend_holiday
 times: [[9, 17]]
 months_ahead: 2

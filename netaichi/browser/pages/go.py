@@ -95,5 +95,7 @@ class JspGo:
             yield page_index
 
     def change_calendar_date(self, date):
-        str_date = date.strftime("%Y,%m,%d")
-        self.jsp.js_exec(f"selectCalendarDate({str_date})")
+        # ゼロ埋め(08,09)はJSで8進数扱いされ得るため、埋めずに渡す
+        self.jsp.js_exec(
+            f"selectCalendarDate({date.year},{date.month},{date.day})"
+        )
