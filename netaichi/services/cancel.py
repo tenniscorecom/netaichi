@@ -75,13 +75,19 @@ def run(
         取消・削除したレッスンのリスト
     """
     conf = load_rules()
-    if target_date is None:
-        target_date = datetime.today() + timedelta(days=conf.get("days_before", 1))
+    today = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
 
     with TennisBear(headless) as tb:
         tb.login()
         events = tb.list_organized_events()
-        targets = find_empty_lessons(events, target_date) + find_solo_practices(events, target_date)
+        if target_date is not None:
+            check_dates = [target_date]
+        else:
+            days = conf.get("days_before", 1)
+            check_dates = [today + timedelta(days=d) for d in range(1, days + 1)]
+        targets = []
+        for d in check_dates:
+            targets += find_empty_lessons(events, d) + find_solo_practices(events, d)
         if not targets:
             return []
 
