@@ -96,10 +96,13 @@ def main():
         case "cancel":
             from netaichi.services.cancel import run
 
-            result = run(execute=not args.dry_run, headless=args.headless)
+            cancelled, warned = run(execute=not args.dry_run, headless=args.headless)
             action = "検出" if args.dry_run else "取消・削除"
-            print(f"{action}: {len(result)}件")
-            for ev in result:
+            print(f"{action}(1日後): {len(cancelled)}件")
+            for ev in cancelled:
+                print(f"  {ev['date']:%m/%d} {ev['start']}時 {ev['court']}")
+            print(f"通知のみ(2日後): {len(warned)}件")
+            for ev in warned:
                 print(f"  {ev['date']:%m/%d} {ev['start']}時 {ev['court']}")
         case "prune":
             from netaichi.services.prune import run
@@ -116,7 +119,7 @@ def main():
 
             pruned = prune.run(headless=args.headless)
             print(f"prune 削除: {len(pruned)}件")
-            cancelled = cancel.run(headless=args.headless)
+            cancelled, _ = cancel.run(headless=args.headless)
             print(f"cancel 取消・削除: {len(cancelled)}件")
 
 

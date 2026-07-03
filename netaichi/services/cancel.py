@@ -60,19 +60,25 @@ def format_message(cancelled: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def format_warning_message(targets: list[dict]) -> str:
+    lines = ["⚠️ 明日キャンセル予定（現時点で集客なし）"]
+    for ev in targets:
+        w = WEEKDAY[ev["date"].weekday()]
+        kind = "レッスン(0人)" if ev["is_lesson"] else "練習会(自分のみ)"
+        lines.append(f"・{ev['date']:%m/%d}({w}) {ev['start']}時 {ev['court']}【{kind}】")
+    return "\n".join(lines)
+
+
 def run(
     target_date: datetime | None = None,
     execute: bool = True,
     headless: bool = IS_HEADLESS,
-) -> list[dict]:
-    """翌日の0人レッスンのコートを取消し、募集を削除する
-
-    Args:
-        target_date: 対象レッスン日（Noneなら days_before 先）
-        execute: Falseなら検出のみ（取消・削除しない）
+) -> tuple[list[dict], list[dict]]:
+    """翌日の0人レッスン・自分のみ練習会のコートを取消し、募集を削除する。
+    2日後が対象の場合は通知のみ行う。
 
     Returns:
-        取消・削除したレッスンのリスト
+        (取消・削除したイベント, 2日後の警告対象イベント)
     """
     conf = load_rules()
     today = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -80,30 +86,31 @@ def run(
     with TennisBear(headless) as tb:
         tb.login()
         events = tb.list_organized_events()
-        if target_date is not None:
-            check_dates = [target_date]
-        else:
-            days = conf.get("days_before", 1)
-            check_dates = [today + timedelta(days=d) for d in range(1, days + 1)]
-        targets = []
-        for d in check_dates:
-            targets += find_empty_lessons(events, d) + find_solo_practices(events, d)
-        if not targets:
-            return []
+
+        # 1日後: キャンセル実行
+        cancel_date = target_date if target_date else today + timedelta(days=conf.get("days_before", 1))
+        targets = find_empty_lessons(events, cancel_date) + find_solo_practices(events, cancel_date)
+
+        # 2日後: 通知のみ（target_date指定時はスキップ）
+        warn_targets = []
+        if target_date is None:
+            warn_date = today + timedelta(days=2)
+            warn_targets = find_empty_lessons(events, warn_date) + find_solo_practices(events, warn_date)
 
         cancelled = []
-        with NetAichi(headless) as na:
-            na.login(id=OGURI_ACCOUNT_ID)
-            for ev in targets:
-                keyword = map_court(ev["court"], conf["court_map"])
-                if keyword is None:
-                    na.logger.warning(f"ネットあいち未対応コートのためスキップ: {ev['court']}")
-                    continue
-                if not execute:
-                    cancelled.append(ev)
-                    continue
-                if na.cancel_reservation(ev["date"], ev["start"], keyword):
-                    cancelled.append(ev)
+        if targets:
+            with NetAichi(headless) as na:
+                na.login(id=OGURI_ACCOUNT_ID)
+                for ev in targets:
+                    keyword = map_court(ev["court"], conf["court_map"])
+                    if keyword is None:
+                        na.logger.warning(f"ネットあいち未対応コートのためスキップ: {ev['court']}")
+                        continue
+                    if not execute:
+                        cancelled.append(ev)
+                        continue
+                    if na.cancel_reservation(ev["date"], ev["start"], keyword):
+                        cancelled.append(ev)
 
         # コート取消に成功した分だけテニスベアの募集も削除する
         if execute:
@@ -112,4 +119,6 @@ def run(
 
     if execute and cancelled:
         notify(format_message(cancelled))
-    return cancelled
+    if execute and warn_targets:
+        notify(format_warning_message(warn_targets))
+    return cancelled, warn_targets
