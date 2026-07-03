@@ -81,16 +81,8 @@ def diff_slots(
 
 
 def format_message(slots: list[dict]) -> str:
-    lines = ["🎾 コートの空きが見つかりました"]
-    for s in sorted(slots, key=lambda x: (x["date"], x["start"])):
-        date = s["date"]
-        week = WEEKDAY_LABELS[date.weekday()]
-        lines.append(f"・{date:%m/%d}({week}) {s['start']}-{s['end']}時 {s['value']}")
-    return "\n".join(lines)
-
-
-def format_gone_message(slots: list[dict]) -> str:
-    lines = ["❌ コートが埋まりました"]
+    now = datetime.now().strftime("%m/%d %H:%M")
+    lines = [f"🎾 現在の空き（{now}時点）"]
     for s in sorted(slots, key=lambda x: (x["date"], x["start"])):
         date = s["date"]
         week = WEEKDAY_LABELS[date.weekday()]
@@ -116,13 +108,13 @@ def check(
 
     ss = SpreadSheet(OGURI_GSS_ID)
     previous = ss.get_current_slots()
-    new, gone = diff_slots(current, previous)
+    _, gone = diff_slots(current, previous)
 
     if notify_enabled:
-        if new:
-            notify(format_message(new))
-        if gone:
-            notify(format_gone_message(gone))
+        if current:
+            notify(format_message(current))
+        elif gone:
+            notify("❌ 現在空きなし")
 
     ss.set_current_slots(current)
-    return new, gone
+    return current, gone

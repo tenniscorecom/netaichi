@@ -3,7 +3,7 @@ from datetime import datetime
 
 from netaichi.services.availability import (
     diff_slots,
-    format_gone_message,
+
     format_message,
     in_time_ranges,
     merge_hour_slots,
@@ -102,10 +102,3 @@ class TestFormatMessage:
         assert lines[1] == "・10/03(土) 9-11時 大高緑地"
         assert lines[2] == "・10/04(日) 13-15時 小幡緑地"
 
-
-class TestFormatGoneMessage:
-    def test_gone_message(self):
-        slots = [{"value": "大高緑地", "date": datetime(2026, 10, 3), "start": 9, "end": 11}]
-        msg = format_gone_message(slots)
-        assert "❌" in msg
-        assert "10/03(土) 9-11時 大高緑地" in msg
