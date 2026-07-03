@@ -66,17 +66,18 @@ def in_time_ranges(slot: dict, ranges: list) -> bool:
     return any(slot["start"] < end and slot["end"] > start for start, end in ranges)
 
 
-def filter_new(slots: list[dict]) -> list[dict]:
-    """スプレッドシートに記録がない空きだけ返し、シートに追記する"""
-    ss = SpreadSheet(OGURI_GSS_ID)
-    notified = ss.get_notified_slots()
-    new = []
-    for slot in slots:
-        key = (slot["value"], slot["date"].strftime("%Y-%m-%d"), str(slot["start"]))
-        if key not in notified:
-            ss.append_availability_slot(slot)
-            new.append(slot)
-    return new
+def diff_slots(
+    current: list[dict], previous: list[dict]
+) -> tuple[list[dict], list[dict]]:
+    """現在の空きと前回の空きを比較し、(新規, 消滅) を返す（純粋関数）"""
+    def key(s):
+        return (s["value"], s["date"].strftime("%Y-%m-%d"), s["start"])
+
+    current_keys = {key(s) for s in current}
+    previous_keys = {key(s) for s in previous}
+    new = [s for s in current if key(s) not in previous_keys]
+    gone = [s for s in previous if key(s) not in current_keys]
+    return new, gone
 
 
 def format_message(slots: list[dict]) -> str:
@@ -88,7 +89,18 @@ def format_message(slots: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def check(notify_enabled: bool = True, headless: bool = IS_HEADLESS) -> list[dict]:
+def format_gone_message(slots: list[dict]) -> str:
+    lines = ["❌ コートが埋まりました"]
+    for s in sorted(slots, key=lambda x: (x["date"], x["start"])):
+        date = s["date"]
+        week = WEEKDAY_LABELS[date.weekday()]
+        lines.append(f"・{date:%m/%d}({week}) {s['start']}-{s['end']}時 {s['value']}")
+    return "\n".join(lines)
+
+
+def check(
+    notify_enabled: bool = True, headless: bool = IS_HEADLESS
+) -> tuple[list[dict], list[dict]]:
     conf = load_rules()
     dates = target_dates(conf)
     slots = []
@@ -99,9 +111,18 @@ def check(notify_enabled: bool = True, headless: bool = IS_HEADLESS) -> list[dic
                 park["keyword"], dates, park.get("court_filter")
             )
 
-    merged = merge_hour_slots(slots)
-    merged = [s for s in merged if in_time_ranges(s, conf["times"])]
-    new = filter_new(merged)
-    if new and notify_enabled:
-        notify(format_message(new))
-    return new
+    current = merge_hour_slots(slots)
+    current = [s for s in current if in_time_ranges(s, conf["times"])]
+
+    ss = SpreadSheet(OGURI_GSS_ID)
+    previous = ss.get_current_slots()
+    new, gone = diff_slots(current, previous)
+
+    if notify_enabled:
+        if new:
+            notify(format_message(new))
+        if gone:
+            notify(format_gone_message(gone))
+
+    ss.set_current_slots(current)
+    return new, gone

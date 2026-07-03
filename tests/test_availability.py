@@ -2,6 +2,8 @@
 from datetime import datetime
 
 from netaichi.services.availability import (
+    diff_slots,
+    format_gone_message,
     format_message,
     in_time_ranges,
     merge_hour_slots,
@@ -56,6 +58,38 @@ class TestInTimeRanges:
         assert not in_time_ranges({"start": 7, "end": 9}, [[9, 17]])
 
 
+class TestDiffSlots:
+    def _slot(self, value, day, start, end=None):
+        return {"value": value, "date": datetime(2026, 10, day), "start": start, "end": end or start + 2}
+
+    def test_new_slot_detected(self):
+        current = [self._slot("大高緑地", 3, 9)]
+        previous = []
+        new, gone = diff_slots(current, previous)
+        assert len(new) == 1
+        assert len(gone) == 0
+
+    def test_gone_slot_detected(self):
+        current = []
+        previous = [self._slot("大高緑地", 3, 9)]
+        new, gone = diff_slots(current, previous)
+        assert len(new) == 0
+        assert len(gone) == 1
+
+    def test_unchanged_slot_not_in_either(self):
+        slot = self._slot("大高緑地", 3, 9)
+        new, gone = diff_slots([slot], [slot])
+        assert len(new) == 0
+        assert len(gone) == 0
+
+    def test_mixed(self):
+        prev = [self._slot("大高緑地", 3, 9), self._slot("小幡緑地", 4, 13)]
+        curr = [self._slot("大高緑地", 3, 9), self._slot("愛・地球博", 5, 11)]
+        new, gone = diff_slots(curr, prev)
+        assert len(new) == 1 and new[0]["value"] == "愛・地球博"
+        assert len(gone) == 1 and gone[0]["value"] == "小幡緑地"
+
+
 class TestFormatMessage:
     def test_sorted_and_named(self):
         slots = [
@@ -67,3 +101,11 @@ class TestFormatMessage:
         assert "空き" in lines[0]
         assert lines[1] == "・10/03(土) 9-11時 大高緑地"
         assert lines[2] == "・10/04(日) 13-15時 小幡緑地"
+
+
+class TestFormatGoneMessage:
+    def test_gone_message(self):
+        slots = [{"value": "大高緑地", "date": datetime(2026, 10, 3), "start": 9, "end": 11}]
+        msg = format_gone_message(slots)
+        assert "❌" in msg
+        assert "10/03(土) 9-11時 大高緑地" in msg

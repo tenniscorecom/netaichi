@@ -78,10 +78,13 @@ def main():
         case "availability":
             from netaichi.services.availability import check
 
-            new = check(notify_enabled=not args.no_notify, headless=args.headless)
+            new, gone = check(notify_enabled=not args.no_notify, headless=args.headless)
             print(f"新規の空き: {len(new)}件")
             for slot in new:
-                print(slot)
+                print(f"  {slot['date']:%m/%d} {slot['start']}-{slot['end']}時 {slot['value']}")
+            print(f"埋まった枠: {len(gone)}件")
+            for slot in gone:
+                print(f"  {slot['date']:%m/%d} {slot['start']}-{slot['end']}時 {slot['value']}")
         case "bear":
             from netaichi.services.bear import run
 

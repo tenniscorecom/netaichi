@@ -96,21 +96,36 @@ class SpreadSheet:
             sheet = self.WORKBOOK.add_worksheet(title=name, rows=2000, cols=cols)
             return sheet
 
-    def get_notified_slots(self) -> set:
-        """通知済み空き枠を (value, date_str, start_str) のセットで返す"""
+    def get_current_slots(self) -> list[dict]:
+        """前回チェック時点の空き枠一覧を返す"""
         sheet = self._get_or_create_sheet(Sheets.AVAILABILITY)
         rows = sheet.get_all_values()
-        return {(r[0], r[1], r[2]) for r in rows if len(r) >= 3}
+        result = []
+        for row in rows:
+            if len(row) >= 4 and row[0]:
+                try:
+                    result.append({
+                        "value": row[0],
+                        "date": datetime.strptime(row[1], "%Y-%m-%d"),
+                        "start": int(row[2]),
+                        "end": int(row[3]),
+                    })
+                except (ValueError, IndexError):
+                    pass
+        return result
 
-    def append_availability_slot(self, slot: dict) -> None:
+    def set_current_slots(self, slots: list[dict]) -> None:
+        """シートを今回の空き枠で上書きする"""
         sheet = self._get_or_create_sheet(Sheets.AVAILABILITY)
-        sheet.append_row([
-            slot["value"],
-            slot["date"].strftime("%Y-%m-%d"),
-            str(slot["start"]),
-            str(slot["end"]),
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        ])
+        sheet.clear()
+        if not slots:
+            return
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        rows = [
+            [s["value"], s["date"].strftime("%Y-%m-%d"), str(s["start"]), str(s["end"]), now]
+            for s in slots
+        ]
+        sheet.append_rows(rows)
 
 
 @dataclass
