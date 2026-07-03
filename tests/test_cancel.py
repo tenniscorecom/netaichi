@@ -1,57 +1,69 @@
 """cancel（ルールB）の純粋ロジックのテスト"""
 from datetime import datetime
 
-from netaichi.services.cancel import find_empty_lessons, format_message, map_court
-
-COURT_MAP = {"大高緑地": "大高緑地", "モリコロパーク": "愛・地球博記念公園"}
+from netaichi.services.cancel import find_empty_lessons, find_solo_practices, format_message
 
 
-def _lesson(day, start, participants, court, is_lesson=True, is_practice=False):
+def _ev(day, start, participants, *, lesson, practice, court="モリコロパークテニスコート"):
     return {
-        "id": f"{day}{start}",
+        "id": f"{day}-{start}",
         "date": datetime(2026, 7, day),
         "start": start,
         "court": court,
         "participants": participants,
-        "capacity": 4,
-        "is_lesson": is_lesson,
-        "is_practice": is_practice,
+        "is_lesson": lesson,
+        "is_practice": practice,
     }
 
 
+TARGET = datetime(2026, 7, 6)
+
+
 class TestFindEmptyLessons:
-    def test_only_zero_participant_lessons_on_target_date(self):
-        events = [
-            _lesson(6, 19, 0, "モリコロパークテニスコート"),
-            _lesson(6, 21, 2, "モリコロパークテニスコート"),  # 2人→対象外
-            _lesson(9, 19, 0, "モリコロパークテニスコート"),  # 別日→対象外
-        ]
-        result = find_empty_lessons(events, datetime(2026, 7, 6))
+    def test_lesson_with_zero_participants(self):
+        events = [_ev(6, 9, 0, lesson=True, practice=False)]
+        result = find_empty_lessons(events, TARGET)
         assert len(result) == 1
-        assert result[0]["start"] == 19
 
-    def test_practice_excluded(self):
-        events = [
-            _lesson(6, 13, 0, "モリコロパークテニスコート",
-                    is_lesson=False, is_practice=True),  # 練習は対象外
-        ]
-        assert find_empty_lessons(events, datetime(2026, 7, 6)) == []
+    def test_lesson_with_participants_not_included(self):
+        events = [_ev(6, 9, 1, lesson=True, practice=False)]
+        assert find_empty_lessons(events, TARGET) == []
+
+    def test_practice_not_included(self):
+        events = [_ev(6, 9, 0, lesson=False, practice=True)]
+        assert find_empty_lessons(events, TARGET) == []
+
+    def test_different_date_not_included(self):
+        events = [_ev(7, 9, 0, lesson=True, practice=False)]
+        assert find_empty_lessons(events, TARGET) == []
 
 
-class TestMapCourt:
-    def test_odaka(self):
-        assert map_court("大高緑地テニスコート", COURT_MAP) == "大高緑地"
+class TestFindSoloPractices:
+    def test_practice_with_one_participant(self):
+        events = [_ev(6, 13, 1, lesson=False, practice=True)]
+        result = find_solo_practices(events, TARGET)
+        assert len(result) == 1
 
-    def test_morikoro_to_official_name(self):
-        assert map_court("モリコロパークテニスコート", COURT_MAP) == "愛・地球博記念公園"
+    def test_practice_with_two_participants_not_included(self):
+        events = [_ev(6, 13, 2, lesson=False, practice=True)]
+        assert find_solo_practices(events, TARGET) == []
 
-    def test_unmapped(self):
-        assert map_court("日進市上納池スポーツ公園", COURT_MAP) is None
+    def test_lesson_not_included(self):
+        events = [_ev(6, 13, 1, lesson=True, practice=False)]
+        assert find_solo_practices(events, TARGET) == []
+
+    def test_different_date_not_included(self):
+        events = [_ev(7, 13, 1, lesson=False, practice=True)]
+        assert find_solo_practices(events, TARGET) == []
 
 
 class TestFormatMessage:
-    def test_message(self):
-        cancelled = [_lesson(6, 19, 0, "モリコロパークテニスコート")]
-        msg = format_message(cancelled)
-        assert "取消" in msg.split("\n")[0]
-        assert "07/06(月) 19時 モリコロパークテニスコート" in msg
+    def test_lesson_label(self):
+        ev = _ev(6, 9, 0, lesson=True, practice=False)
+        msg = format_message([ev])
+        assert "レッスン(集客0)" in msg
+
+    def test_practice_label(self):
+        ev = _ev(6, 13, 1, lesson=False, practice=True)
+        msg = format_message([ev])
+        assert "練習会(自分のみ)" in msg

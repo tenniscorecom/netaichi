@@ -32,6 +32,17 @@ def find_empty_lessons(events: list[dict], target_date: datetime) -> list[dict]:
     ]
 
 
+def find_solo_practices(events: list[dict], target_date: datetime) -> list[dict]:
+    """対象日の練習会で自分のみ（参加者1人）のものを返す（純粋関数）"""
+    return [
+        ev
+        for ev in events
+        if ev["is_practice"]
+        and ev["participants"] == 1
+        and ev["date"].date() == target_date.date()
+    ]
+
+
 def map_court(bear_court: str, court_map: dict) -> str | None:
     """テニスベアのコート名をネットあいちの予約一覧でのコート名に変換する"""
     for key, netaichi_name in court_map.items():
@@ -41,10 +52,11 @@ def map_court(bear_court: str, court_map: dict) -> str | None:
 
 
 def format_message(cancelled: list[dict]) -> str:
-    lines = ["🗑️ 集客0のためコート予約を取消しました（テニスベア募集も削除）"]
+    lines = ["🗑️ コート予約を取消しました（テニスベア募集も削除）"]
     for ev in cancelled:
         w = WEEKDAY[ev["date"].weekday()]
-        lines.append(f"・{ev['date']:%m/%d}({w}) {ev['start']}時 {ev['court']}")
+        kind = "レッスン(集客0)" if ev["is_lesson"] else "練習会(自分のみ)"
+        lines.append(f"・{ev['date']:%m/%d}({w}) {ev['start']}時 {ev['court']}【{kind}】")
     return "\n".join(lines)
 
 
@@ -69,7 +81,7 @@ def run(
     with TennisBear(headless) as tb:
         tb.login()
         events = tb.list_organized_events()
-        targets = find_empty_lessons(events, target_date)
+        targets = find_empty_lessons(events, target_date) + find_solo_practices(events, target_date)
         if not targets:
             return []
 
