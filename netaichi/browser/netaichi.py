@@ -158,8 +158,8 @@ class NetAichi(Jsp):
         if court_filter is None:
             court_filter = ["庭球場", "テニス", "コート"]
 
-        if not self.__search_and_select_park(park_keyword):
-            if not self.__recover_and_select_park(park_keyword):
+        if not self.__search_and_select_park(park_keyword, court_filter):
+            if not self.__recover_and_select_park(park_keyword, court_filter):
                 return []
 
         slots = []
@@ -177,13 +177,13 @@ class NetAichi(Jsp):
                     self.logger.error(f"空き取得エラー {park_keyword} {date:%Y-%m-%d}: {e}")
                     if attempt == 0:
                         self.logger.info(f"{park_keyword}: 施設検索からやり直します")
-                        if not self.__search_and_select_park(park_keyword):
-                            if not self.__recover_and_select_park(park_keyword):
+                        if not self.__search_and_select_park(park_keyword, court_filter):
+                            if not self.__recover_and_select_park(park_keyword, court_filter):
                                 return slots
         self.logger.info(f"{park_keyword} 合計取得: {len(slots)}件 (filter={court_filter})")
         return slots
 
-    def __search_and_select_park(self, park_keyword: str) -> bool:
+    def __search_and_select_park(self, park_keyword: str, court_filter: list[str]) -> bool:
         """施設名検索でparkを選択し、空き状況ページを開く"""
         if not self.__go_name_search():
             self.logger.error("施設名検索ページに移動できませんでした")
@@ -193,13 +193,32 @@ class NetAichi(Jsp):
         if self.click('input[value="選択"]') is False:
             self.logger.warning(f"施設が見つかりませんでした: {park_keyword}")
             return False
+        self.__filter_facilities(court_filter)
         return True
 
-    def __recover_and_select_park(self, park_keyword: str) -> bool:
+    def __recover_and_select_park(self, park_keyword: str, court_filter: list[str]) -> bool:
         """壊れたページ状態からトップページ経由で施設検索をやり直す"""
         self.logger.info("トップページに戻って復帰を試みます")
         self.go_page(self.BASE_URL)
-        return self.__search_and_select_park(park_keyword)
+        return self.__search_and_select_park(park_keyword, court_filter)
+
+    def __filter_facilities(self, court_filter: list[str]) -> None:
+        """サイドバーの施設チェックボックスを対象施設だけに絞り込む。
+        表示ページ数が減り、日付ごとのパースが大幅に速くなる。"""
+        soup = self.get_html()
+        unchecked = 0
+        for cb in soup.select('input[name="chkIcd"]'):
+            label = cb.find_parent("label")
+            name = label.get_text(strip=True) if label else ""
+            if not any(f in name for f in court_filter):
+                self.js_exec(
+                    "document.querySelector("
+                    f"'input[name=\"chkIcd\"][value=\"{cb.get('value')}\"]').checked = false;"
+                )
+                unchecked += 1
+        if unchecked:
+            self.click("#doReload")
+            self.logger.debug(f"施設絞り込み: {unchecked}件を非表示")
 
     def __go_name_search(self) -> bool:
         """「施設名から探す」ページへ移動する（マイページ/検索系ページの両方に対応）"""
