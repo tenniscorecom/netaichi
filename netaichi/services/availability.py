@@ -12,7 +12,7 @@ from netaichi.browser import EAichi, NagoyaSporec, NetAichi
 from netaichi.config import IS_HEADLESS, OGURI_GSS_ID, RULES_DIR
 from netaichi.helper import SpreadSheet
 from netaichi.notify import notify
-from netaichi.services.lottery import GROUP_IDS, rule_applies
+from netaichi.services.lottery import rule_applies
 
 WEEKDAY_LABELS = ["月", "火", "水", "木", "金", "土", "日"]
 
@@ -159,8 +159,8 @@ def check(
 
     slots = []
     if netaichi_rules:
+        # 空き状況の確認だけならログイン不要（抽選実行時のセッション競合も防げる）
         with NetAichi(headless) as na:
-            na.login(id=GROUP_IDS[conf["account"]])
             for rule in netaichi_rules:
                 slots += _collect_rule_slots(na, rule, _rule_dates(rule, today, end_date))
 

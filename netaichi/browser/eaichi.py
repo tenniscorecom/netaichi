@@ -20,22 +20,13 @@ class EAichi(NetAichi):
         self.municipality = municipality
 
     def _go_name_search(self) -> bool:
-        """施設名検索画面を開く。
+        """施設名検索画面を開く。ネットあいちとの違いは自治体選択画面が挟まる点のみ。
 
         このシステムは画面遷移トークンを検証するため、途中でURLを直接開くと
         「遷移情報に誤りがあります」エラーになる。画面内のリンクだけで遷移する。
         """
-        # 画面内のサイドバー「施設名から探す」があればそれで遷移（ネットあいちと同じ）
         if not super()._go_name_search():
-            # 初回はトップ画面のメニュー「施設名から」画像リンクから入る
-            if not self.get_elements_by_css('img[alt="施設名から"]'):
-                self.go_page(self.BASE_URL)
-                try:
-                    self.wait_element_load_by_css('img[alt="施設名から"]')
-                except Exception:
-                    self.logger.error("「施設名から」メニューが見つかりません")
-                    return False
-            self.js_exec('document.querySelector(\'img[alt="施設名から"]\').closest("a").click();')
+            return False
         # 検索画面が直接出るか、自治体選択画面が挟まるかのどちらか
         try:
             self.wait_element_load_by_css("#textKeyword")

@@ -221,13 +221,25 @@ class NetAichi(Jsp):
             self.logger.debug(f"施設絞り込み: {unchecked}件を非表示")
 
     def _go_name_search(self) -> bool:
-        """「施設名から探す」ページへ移動する（マイページ/検索系ページの両方に対応）"""
+        """「施設名から探す」ページへ移動する。
+
+        ログイン中のサイドバーリンク・未ログインのトップページメニューの
+        両方に対応する（空き状況の確認だけならログイン不要）。
+        """
         elements = self.get_elements_by_css("#goNameSearch")
         if not elements:
             elements = self.get_elements_by_contains_text("//a", "施設名から探す")
-        if not elements:
-            return False
-        elements[0].click()
+        if elements:
+            elements[0].click()
+            return True
+        # 未ログインではトップページの「施設名から」画像リンクから入る
+        if not self.get_elements_by_css('img[alt="施設名から"]'):
+            self.go_page(self.BASE_URL)
+            try:
+                self.wait_element_load_by_css('img[alt="施設名から"]')
+            except Exception:
+                return False
+        self.js_exec('document.querySelector(\'img[alt="施設名から"]\').closest("a").click();')
         return True
 
     def __parse_vacant_slots(
