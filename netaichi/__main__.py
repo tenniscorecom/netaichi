@@ -26,6 +26,9 @@ def main():
     p_avail.add_argument(
         "--headless", action="store_true", help="ブラウザ画面を表示せず実行（定期実行用）"
     )
+    p_avail.add_argument(
+        "--sites", help="チェックするサイト（カンマ区切り: netaichi,eaichi。省略時は全サイト）"
+    )
 
     p_bear = sub.add_parser("bear", help="予約確定分の募集をテニスベアに作成")
     p_bear.add_argument(
@@ -78,7 +81,10 @@ def main():
         case "availability":
             from netaichi.services.availability import check
 
-            new, gone = check(notify_enabled=not args.no_notify, headless=args.headless)
+            sites = args.sites.split(",") if args.sites else None
+            new, gone = check(
+                notify_enabled=not args.no_notify, headless=args.headless, sites=sites
+            )
             print(f"新規の空き: {len(new)}件")
             for slot in new:
                 print(f"  {slot['date']:%m/%d} {slot['start']}-{slot['end']}時 {slot['value']}")

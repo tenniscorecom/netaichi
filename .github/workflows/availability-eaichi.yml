@@ -1,21 +1,21 @@
-name: availability-check
+name: availability-eaichi
 
 on:
   schedule:
-    # 1回のチェックに約15分かかるため20分間隔
+    # 日進市（e-aichi）は施設が少なく速いので15分間隔
     # （毎時0分はGitHub側の混雑で遅延しやすいためずらす）
-    - cron: '7,27,47 * * * *'
+    - cron: '3,18,33,48 * * * *'
   workflow_dispatch:
 
 # 前のrunが終わる前に次が始まらないようにする（重複通知・シート競合防止）
 concurrency:
-  group: availability-check
+  group: availability-eaichi
   cancel-in-progress: false
 
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 14
 
     env:
       TZ: Asia/Tokyo
@@ -33,7 +33,7 @@ jobs:
 
       - run: poetry install --no-root
 
-      - run: poetry run python -m netaichi availability --headless --sites netaichi
+      - run: poetry run python -m netaichi availability --headless --sites eaichi
         env:
           NETAICHI_DEFAULT_PW: ${{ secrets.NETAICHI_DEFAULT_PW }}
           OGURI_ACCOUNT_ID: ${{ secrets.OGURI_ACCOUNT_ID }}

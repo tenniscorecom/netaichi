@@ -185,7 +185,7 @@ class NetAichi(Jsp):
 
     def __search_and_select_park(self, park_keyword: str, court_filter: list[str]) -> bool:
         """施設名検索でparkを選択し、空き状況ページを開く"""
-        if not self.__go_name_search():
+        if not self._go_name_search():
             self.logger.error("施設名検索ページに移動できませんでした")
             return False
         self.send_form("#textKeyword", park_keyword)
@@ -220,7 +220,7 @@ class NetAichi(Jsp):
             self.click("#doReload")
             self.logger.debug(f"施設絞り込み: {unchecked}件を非表示")
 
-    def __go_name_search(self) -> bool:
+    def _go_name_search(self) -> bool:
         """「施設名から探す」ページへ移動する（マイページ/検索系ページの両方に対応）"""
         elements = self.get_elements_by_css("#goNameSearch")
         if not elements:

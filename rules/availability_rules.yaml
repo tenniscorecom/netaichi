@@ -4,6 +4,8 @@
 # months_ahead: 何ヶ月先までチェックするか
 # rules:        チェックルールのリスト（複数可）
 #   name:   ルール名（ログ・通知用）
+#   site:   netaichi（県施設、デフォルト）または eaichi（市町村施設、ログイン不要）
+#   municipality: site=eaichi のとき必須。自治体名（例: 日進市）
 #   parks:  チェック対象施設リスト
 #     keyword:      施設名検索のキーワード
 #     court_filter: 施設名にこれを含むもののみ対象
@@ -26,3 +28,21 @@ rules:
         show_court: false  # あまり使わないので日付・時間だけ通知
     days: weekend_holiday
     times: [[9, 17]]
+  - name: 日進市 土日祝
+    site: eaichi
+    municipality: 日進市
+    parks:
+      - keyword: 市営テニスコート
+        court_filter: [テニス, コート]
+      - keyword: 上納池テニスコート
+        court_filter: [テニス, コート]
+    days: weekend_holiday
+    times: [[9, 17]]
+  - name: 上納池 平日夜
+    site: eaichi
+    municipality: 日進市
+    parks:
+      - keyword: 上納池テニスコート
+        court_filter: [テニス, コート]
+    days: [0, 1, 2, 3, 4]
+    times: [[19, 24]]

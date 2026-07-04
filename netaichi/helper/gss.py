@@ -96,9 +96,9 @@ class SpreadSheet:
             sheet = self.WORKBOOK.add_worksheet(title=name, rows=2000, cols=cols)
             return sheet
 
-    def get_current_slots(self) -> list[dict]:
+    def get_current_slots(self, sheet_name: str = None) -> list[dict]:
         """前回チェック時点の空き枠一覧を返す"""
-        sheet = self._get_or_create_sheet(Sheets.AVAILABILITY)
+        sheet = self._get_or_create_sheet(sheet_name or Sheets.AVAILABILITY)
         rows = sheet.get_all_values()
         result = []
         for row in rows:
@@ -115,9 +115,9 @@ class SpreadSheet:
                     pass
         return result
 
-    def set_current_slots(self, slots: list[dict]) -> None:
+    def set_current_slots(self, slots: list[dict], sheet_name: str = None) -> None:
         """シートを今回の空き枠で上書きする（clear→writeの順でアトミックに近い形で実行）"""
-        sheet = self._get_or_create_sheet(Sheets.AVAILABILITY)
+        sheet = self._get_or_create_sheet(sheet_name or Sheets.AVAILABILITY)
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         if not slots:
             sheet.clear()

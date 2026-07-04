@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 import yaml
 from dateutil.relativedelta import relativedelta
 
-from netaichi.browser import NetAichi
+from netaichi.browser import EAichi, NetAichi
 from netaichi.config import IS_HEADLESS, OGURI_GSS_ID, RULES_DIR
 from netaichi.helper import SpreadSheet
 from netaichi.notify import notify
@@ -75,10 +75,15 @@ def diff_slots(
     return new, gone
 
 
-def format_message(slots: list[dict], fetch_time: datetime | None = None) -> str:
+SITE_LABELS = {"netaichi": "県営", "eaichi": "日進"}
+
+
+def format_message(
+    slots: list[dict], fetch_time: datetime | None = None, label: str = ""
+) -> str:
     ft = fetch_time or datetime.now()
     jst_str = ft.strftime("%m/%d %H:%M")
-    lines = [f"🎾 現在の空き（{jst_str}時点）[{len(slots)}件]"]
+    lines = [f"🎾 現在の空き{label}（{jst_str}時点）[{len(slots)}件]"]
     for s in sorted(slots, key=lambda x: (x["value"], x["date"], x["start"], x.get("facility", ""))):
         date = s["date"]
         week = WEEKDAY_LABELS[date.weekday()]
@@ -88,49 +93,88 @@ def format_message(slots: list[dict], fetch_time: datetime | None = None) -> str
     return "\n".join(lines)
 
 
+def _rule_dates(rule: dict, today: datetime, end_date: datetime) -> list[datetime]:
+    dates = []
+    d = today + timedelta(days=1)
+    while d <= end_date:
+        if rule_applies({"days": rule["days"]}, d):
+            dates.append(d)
+        d += timedelta(days=1)
+    return dates
+
+
+def _collect_rule_slots(browser, rule: dict, dates: list[datetime]) -> list[dict]:
+    slots = []
+    for park in rule["parks"]:
+        park_slots = browser.find_available_slots(
+            park["keyword"], dates, park.get("court_filter")
+        )
+        park_slots = [s for s in park_slots if in_time_ranges(s, rule["times"])]
+        if not park.get("show_court", True):
+            for s in park_slots:
+                s["facility"] = ""
+        browser.logger.info(
+            f"[{rule.get('name', '')}] {park['keyword']}: {len(park_slots)}件"
+        )
+        slots += park_slots
+    return slots
+
+
 def check(
-    notify_enabled: bool = True, headless: bool = IS_HEADLESS
+    notify_enabled: bool = True,
+    headless: bool = IS_HEADLESS,
+    sites: list[str] | None = None,
 ) -> tuple[list[dict], list[dict]]:
+    """空き状況をチェックして通知する。
+
+    Args:
+        sites: チェックするサイトのリスト（例: ["netaichi"]）。
+               Noneなら全サイト。ワークフローを分割して並列実行するために使う。
+               サイトごとに状態保存シートを分けているので並列実行しても競合しない。
+    """
     conf = load_rules()
     months_ahead = conf.get("months_ahead", 2)
     today = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
     end_date = today + relativedelta(months=months_ahead)
 
+    rules = conf["rules"]
+    if sites is not None:
+        rules = [r for r in rules if r.get("site", "netaichi") in sites]
+
     fetch_time = datetime.now()
+    netaichi_rules = [r for r in rules if r.get("site", "netaichi") == "netaichi"]
+    eaichi_rules = [r for r in rules if r.get("site") == "eaichi"]
+
     slots = []
-    with NetAichi(headless) as na:
-        na.login(id=GROUP_IDS[conf["account"]])
-        for rule in conf["rules"]:
-            dates = []
-            d = today + timedelta(days=1)
-            while d <= end_date:
-                if rule_applies({"days": rule["days"]}, d):
-                    dates.append(d)
-                d += timedelta(days=1)
-            for park in rule["parks"]:
-                park_slots = na.find_available_slots(
-                    park["keyword"], dates, park.get("court_filter")
-                )
-                park_slots = [s for s in park_slots if in_time_ranges(s, rule["times"])]
-                if not park.get("show_court", True):
-                    for s in park_slots:
-                        s["facility"] = ""
-                na.logger.info(
-                    f"[{rule.get('name', '')}] {park['keyword']}: {len(park_slots)}件"
-                )
-                slots += park_slots
+    if netaichi_rules:
+        with NetAichi(headless) as na:
+            na.login(id=GROUP_IDS[conf["account"]])
+            for rule in netaichi_rules:
+                slots += _collect_rule_slots(na, rule, _rule_dates(rule, today, end_date))
+
+    if eaichi_rules:
+        # e-aichi（市町村施設）は空き確認だけならログイン不要
+        with EAichi(eaichi_rules[0]["municipality"], headless) as ea:
+            for rule in eaichi_rules:
+                ea.municipality = rule["municipality"]
+                slots += _collect_rule_slots(ea, rule, _rule_dates(rule, today, end_date))
 
     current = merge_hour_slots(slots)
 
+    sheet_name = "通知済み空き" + (f"({'+'.join(sorted(sites))})" if sites else "")
+    label = (
+        "【" + "・".join(SITE_LABELS.get(s, s) for s in sorted(sites)) + "】"
+        if sites else ""
+    )
     ss = SpreadSheet(OGURI_GSS_ID)
-    previous = ss.get_current_slots()
+    previous = ss.get_current_slots(sheet_name)
     _, gone = diff_slots(current, previous)
 
     if notify_enabled:
         if current:
-            notify(format_message(current, fetch_time))
+            notify(format_message(current, fetch_time, label))
         elif gone:
-            notify("❌ 現在空きなし")
+            notify(f"❌ 現在空きなし{label}")
 
-    ss.set_current_slots(current)
+    ss.set_current_slots(current, sheet_name)
     return current, gone
