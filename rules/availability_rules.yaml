@@ -24,6 +24,7 @@ rules:
         court_filter: [庭球場]
       - keyword: 愛・地球博記念公園
         court_filter: [庭球場, フットサル]
+        show_court: false  # コート番号は出さず日付・時間だけにまとめる
       - keyword: 愛知県森林公園
         court_filter: [コート]
         show_court: false  # あまり使わないので日付・時間だけ通知
