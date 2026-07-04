@@ -33,7 +33,7 @@ rules:
     municipality: 日進市
     parks:
       - keyword: 市営テニスコート
-        court_filter: [テニス, コート]
+        court_filter: [西山, 香久山]  # 藤島は対象外
       - keyword: 上納池テニスコート
         court_filter: [テニス, コート]
     days: weekend_holiday
