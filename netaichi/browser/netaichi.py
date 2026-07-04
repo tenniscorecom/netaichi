@@ -158,26 +158,40 @@ class NetAichi(Jsp):
         if court_filter is None:
             court_filter = ["庭球場", "テニス", "コート"]
 
-        if not self.__go_name_search():
-            self.logger.error("施設名検索ページに移動できませんでした")
-            return []
-        self.send_form("#textKeyword", park_keyword)
-        self.click('input[value="上記の内容で検索する"]')
-        if self.click('input[value="選択"]') is False:
-            self.logger.warning(f"施設が見つかりませんでした: {park_keyword}")
+        if not self.__search_and_select_park(park_keyword):
             return []
 
         slots = []
         for date in dates:
-            try:
-                self.go.change_calendar_date(date)
-                day_slots = self.__parse_vacant_slots(park_keyword, date, court_filter)
-                self.logger.debug(f"{park_keyword} {date:%Y-%m-%d}: {len(day_slots)}件")
-                slots += day_slots
-            except Exception as e:
-                self.logger.error(f"空き取得エラー {park_keyword} {date:%Y-%m-%d}: {e}")
+            # ページ状態が壊れた場合（selectCalendarDate未定義等）は
+            # 施設検索からやり直して1回だけリトライする
+            for attempt in range(2):
+                try:
+                    self.go.change_calendar_date(date)
+                    day_slots = self.__parse_vacant_slots(park_keyword, date, court_filter)
+                    self.logger.debug(f"{park_keyword} {date:%Y-%m-%d}: {len(day_slots)}件")
+                    slots += day_slots
+                    break
+                except Exception as e:
+                    self.logger.error(f"空き取得エラー {park_keyword} {date:%Y-%m-%d}: {e}")
+                    if attempt == 0:
+                        self.logger.info(f"{park_keyword}: 施設検索からやり直します")
+                        if not self.__search_and_select_park(park_keyword):
+                            return slots
         self.logger.info(f"{park_keyword} 合計取得: {len(slots)}件 (filter={court_filter})")
         return slots
+
+    def __search_and_select_park(self, park_keyword: str) -> bool:
+        """施設名検索でparkを選択し、空き状況ページを開く"""
+        if not self.__go_name_search():
+            self.logger.error("施設名検索ページに移動できませんでした")
+            return False
+        self.send_form("#textKeyword", park_keyword)
+        self.click('input[value="上記の内容で検索する"]')
+        if self.click('input[value="選択"]') is False:
+            self.logger.warning(f"施設が見つかりませんでした: {park_keyword}")
+            return False
+        return True
 
     def __go_name_search(self) -> bool:
         """「施設名から探す」ページへ移動する（マイページ/検索系ページの両方に対応）"""
