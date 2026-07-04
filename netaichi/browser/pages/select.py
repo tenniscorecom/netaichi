@@ -10,7 +10,9 @@ class JspSelect:
         self.jsp: Jsp = jsp
 
     def court(self, value: str) -> bool:
-        self.jsp.select_radio_by_value(value)
+        # コートが抽選メニューに存在しない場合（改修中など）はFalseを返す
+        if self.jsp.select_radio_by_value(value) is False:
+            return False
         if self.jsp.click(Selector.BTN_COURT) is False:
             return False
         # 施設によって細分化されてる場合はここから分岐

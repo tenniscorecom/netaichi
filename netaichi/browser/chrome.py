@@ -154,9 +154,12 @@ class ChromeBrowser:
         else:
             self.logger.error(BrowserError.BASE_NO_FORM.format(selector))
 
-    def select_radio_by_value(self, value):
+    def select_radio_by_value(self, value) -> bool:
         radio = self.get_element_by_css(f'input[value="{value}"]')
+        if radio is None:
+            return False
         radio.send_keys(Keys.SPACE)
+        return True
 
     def select_pulldown(self, selector: str, index: int):
         self.select_by_index(self.get_element_by_css(selector), index - 1)

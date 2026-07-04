@@ -38,7 +38,9 @@ class NetAichi(Jsp):
     def add_lottery(self, df: pd.DataFrame):
         for value, group in df.groupby("value"):
             self.go.mypage().lottery()
-            self.select.court(value)
+            if not self.select.court(value):
+                self.logger.warning(f"抽選メニューにないコートのためスキップ: {value}")
+                continue
 
             for g in group.itertuples():
                 self.go.change_calendar_date(g.date)
