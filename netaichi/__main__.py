@@ -17,6 +17,12 @@ def main():
         "--dry-run", action="store_true", help="確認画面まで進むが確定しない"
     )
 
+    p_lcancel = sub.add_parser("lottery-cancel", help="条件一致の抽選申込をグループ全アカウントで取消")
+    p_lcancel.add_argument("group", choices=["oguri", "komada"], help="対象グループ")
+    p_lcancel.add_argument("--court", required=True, help="コートの施設値（例: 400）")
+    p_lcancel.add_argument("--start", type=int, help="開始時（例: 19）。省略時は時間を問わず対象")
+    p_lcancel.add_argument("--dry-run", action="store_true", help="対象の表示のみ（取り消さない）")
+
     sub.add_parser("reserve", help="予約情報を収集しスプレッドシートに反映")
 
     p_avail = sub.add_parser("availability", help="空き状況をチェックし新規の空きをDiscordに通知")
@@ -78,6 +84,18 @@ def main():
             from netaichi.services.lottery import run_group
 
             run_group(args.group, dry_run=args.dry_run)
+        case "lottery-cancel":
+            from netaichi.services.lottery import cancel_group
+
+            results = cancel_group(
+                args.group, args.court, args.start, dry_run=args.dry_run
+            )
+            action = "取消対象" if args.dry_run else "取消済み"
+            for account_id, items in results.items():
+                print(f"{account_id}: {action} {len(items)}件")
+                for item in items:
+                    date = item["date"] if isinstance(item["date"], str) else f"{item['date']:%m/%d}"
+                    print(f"  {date} {item['start']}時")
         case "reserve":
             from netaichi.services.reserve import reserve
 

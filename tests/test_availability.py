@@ -116,20 +116,31 @@ class TestDiffSlots:
 
 
 class TestFormatMessage:
-    def test_sorted_by_park_date_time_and_court_shown(self):
+    def test_grouped_by_date_with_court(self):
         slots = [
             {"value": "小幡緑地", "date": datetime(2026, 10, 4), "start": 13, "end": 15, "facility": "庭球場３"},
             {"value": "大高緑地", "date": datetime(2026, 10, 3), "start": 9, "end": 11, "facility": "庭球場１"},
         ]
         message = format_message(slots, fetch_time=datetime(2026, 10, 3, 12, 0))
-        lines = message.split("\n")
+        lines = message.split(chr(10))
         assert "現在の空き" in lines[0]
         assert "[2件]" in lines[0]
         assert "10/03 12:00" in lines[0]
-        assert lines[1] == "・大高緑地 10/03(土) 9-11時 庭球場１"
-        assert lines[2] == "・小幡緑地 10/04(日) 13-15時 庭球場３"
+        assert lines[1] == "10/03(土)"
+        assert lines[2] == "　大高緑地 9-11時 庭球場１"
+        assert lines[3] == "10/04(日)"
+        assert lines[4] == "　小幡緑地 13-15時 庭球場３"
+
+    def test_same_date_grouped_under_one_header(self):
+        date = datetime(2026, 10, 3)
+        slots = [
+            {"value": "大高緑地", "date": date, "start": 9, "end": 11, "facility": ""},
+            {"value": "小幡緑地", "date": date, "start": 13, "end": 15, "facility": ""},
+        ]
+        message = format_message(slots, fetch_time=datetime(2026, 10, 3, 12, 0))
+        assert message.count("10/03(土)") == 1
 
     def test_facility_optional(self):
         slots = [{"value": "大高緑地", "date": datetime(2026, 10, 3), "start": 9, "end": 11}]
         message = format_message(slots, fetch_time=datetime(2026, 10, 3, 12, 0))
-        assert "・大高緑地 10/03(土) 9-11時" in message
+        assert "　大高緑地 9-11時" in message

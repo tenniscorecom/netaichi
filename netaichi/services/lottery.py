@@ -143,6 +143,34 @@ def run_group(name: str, dry_run: bool = False):
             na.run_lottery(master_id=group_id, players=conf.get("players", 4))
 
 
+def cancel_group(
+    name: str, court_value: str, start: int | None = None, dry_run: bool = False
+) -> dict[str, list[dict]]:
+    """グループ全アカウントで、条件一致の抽選申込を取り消す
+
+    Args:
+        court_value: コートの施設値（例: "400"=モリコロフットサル）
+        start: 開始時（例: 19）。Noneなら時間を問わず対象
+        dry_run: Trueなら対象の表示のみで取り消さない
+    """
+    accounts = get_group_accounts(GROUP_IDS[name])
+    results = {}
+    with NetAichi(IS_HEADLESS) as na:
+        for account in accounts:
+            na.login(account=account)
+            if dry_run:
+                applied = na.get.lottery()
+                matches = [
+                    a for a in applied
+                    if a["value"] == str(court_value)
+                    and (start is None or int(a["start"]) == start)
+                ]
+                results[account.id] = matches
+            else:
+                results[account.id] = na.cancel_lottery(str(court_value), start)
+    return results
+
+
 # 旧CLI互換
 def oguri():
     run_group("oguri")

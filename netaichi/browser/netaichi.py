@@ -127,6 +127,48 @@ class NetAichi(Jsp):
         self.logger.info(self.get.lottery_status())
         self.logger.info(self.get.lottery_status_detail())
 
+    def cancel_lottery(self, court_value: str, start: int | None = None) -> list[dict]:
+        """抽選申込一覧から条件（コート、開始時）に一致する申込をすべて取り消す。
+
+        取り消すたびに一覧の行番号がずれるため、一致がなくなるまで
+        一覧の走査からやり直す。
+        """
+        cancelled = []
+        while True:
+            target = self.__find_lottery_row(court_value, start)
+            if target is None:
+                break
+            index, info = target
+            self.js_exec(f"doSelect(document.form1, {index}, gLotUInstLotSelectAction);")
+            time.sleep(1.5)
+            if self.click('input[value="取消"]') is False:
+                self.logger.error(f"取消ボタンが見つかりません: {info}")
+                break
+            self.alert_switch(True)
+            time.sleep(1.5)
+            self.logger.info(f"抽選申込を取り消しました: {info['date']} {info['start']}時 {info['court']}")
+            cancelled.append(info)
+        return cancelled
+
+    def __find_lottery_row(
+        self, court_value: str, start: int | None
+    ) -> tuple[int, dict] | None:
+        """抽選申込一覧を走査し、条件一致する最初の行の（ページ内index, 情報）を返す"""
+        for _ in self.go.lottery_list():
+            soup = self.get_html()
+            dates = soup.select(Selector.LOTTERY_DATA_DATE)
+            starts = soup.select(Selector.LOTTERY_DATA_START)
+            courts = soup.select(Selector.LOTTERY_DATA_COURT)
+            states = soup.select("#lotStateLabel")
+            for i in range(len(dates)):
+                if states and "抽選前" not in states[i].text:
+                    continue  # 抽選済み等は取消不可
+                value = self.to_value(courts[i].text)
+                s = int(starts[i].text.removesuffix("時"))
+                if value == str(court_value) and (start is None or s == start):
+                    return i, {"date": dates[i].text, "start": s, "court": courts[i].text}
+        return None
+
     def __check_lottery(self, data: T_LotteryData) -> bool:
         """抽選確認画面の表示内容が申込データと一致するか検証する"""
         court_name = self.get_element_by_css(Selector.LOTTERY_CHECK_COURT).text

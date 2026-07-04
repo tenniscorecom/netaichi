@@ -81,15 +81,21 @@ SITE_LABELS = {"netaichi": "県営", "eaichi": "日進", "nagoya": "名古屋"}
 def format_message(
     slots: list[dict], fetch_time: datetime | None = None, label: str = ""
 ) -> str:
+    """日付ごとにまとめて表示する。行形式: 　コート 時間 コート番号"""
     ft = fetch_time or datetime.now()
     jst_str = ft.strftime("%m/%d %H:%M")
     lines = [f"🎾 現在の空き{label}（{jst_str}時点）[{len(slots)}件]"]
-    for s in sorted(slots, key=lambda x: (x["value"], x["date"], x["start"], x.get("facility", ""))):
+    slots = sorted(slots, key=lambda x: (x["date"], x["value"], x["start"], x.get("facility", "")))
+    current_date = None
+    for s in slots:
         date = s["date"]
-        week = WEEKDAY_LABELS[date.weekday()]
+        if date != current_date:
+            week = WEEKDAY_LABELS[date.weekday()]
+            lines.append(f"{date:%m/%d}({week})")
+            current_date = date
         facility = s.get("facility", "")
         court_str = f" {facility}" if facility else ""
-        lines.append(f"・{s['value']} {date:%m/%d}({week}) {s['start']}-{s['end']}時{court_str}")
+        lines.append(f"　{s['value']} {s['start']}-{s['end']}時{court_str}")
     return "\n".join(lines)
 
 
@@ -194,6 +200,8 @@ def check(
                     slots += park_slots
 
     current = merge_hour_slots(slots)
+    # 1時間だけの枠は実用性が低いので除外する
+    current = [s for s in current if s["end"] - s["start"] >= 2]
 
     sheet_name = "通知済み空き" + (f"({'+'.join(sorted(sites))})" if sites else "")
     label = (
