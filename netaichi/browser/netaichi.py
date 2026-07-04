@@ -159,7 +159,8 @@ class NetAichi(Jsp):
             court_filter = ["庭球場", "テニス", "コート"]
 
         if not self.__search_and_select_park(park_keyword):
-            return []
+            if not self.__recover_and_select_park(park_keyword):
+                return []
 
         slots = []
         for date in dates:
@@ -177,7 +178,8 @@ class NetAichi(Jsp):
                     if attempt == 0:
                         self.logger.info(f"{park_keyword}: 施設検索からやり直します")
                         if not self.__search_and_select_park(park_keyword):
-                            return slots
+                            if not self.__recover_and_select_park(park_keyword):
+                                return slots
         self.logger.info(f"{park_keyword} 合計取得: {len(slots)}件 (filter={court_filter})")
         return slots
 
@@ -192,6 +194,12 @@ class NetAichi(Jsp):
             self.logger.warning(f"施設が見つかりませんでした: {park_keyword}")
             return False
         return True
+
+    def __recover_and_select_park(self, park_keyword: str) -> bool:
+        """壊れたページ状態からトップページ経由で施設検索をやり直す"""
+        self.logger.info("トップページに戻って復帰を試みます")
+        self.go_page(self.BASE_URL)
+        return self.__search_and_select_park(park_keyword)
 
     def __go_name_search(self) -> bool:
         """「施設名から探す」ページへ移動する（マイページ/検索系ページの両方に対応）"""
