@@ -18,7 +18,7 @@ from netaichi.config import (
     RULES_DIR,
 )
 from netaichi.db import M_Account, NetaichiDatabase, T_LotteryData, select
-from netaichi.helper import sqlmodel_to_df
+from netaichi.helper import filter_applied, sqlmodel_to_df
 
 db = NetaichiDatabase(False)
 
@@ -86,22 +86,6 @@ def get_group_accounts(group_id: str) -> list[M_Account]:
             .where(M_Account.account_group == group_id)
             .order_by(desc(M_Account.is_master))
         ).all()
-
-
-def filter_applied(df, applied: list[dict]):
-    """申込済みの (コート, 日付, 開始時) と重複する行を除外する（純粋関数）"""
-    if df.empty or not applied:
-        return df
-    applied_keys = {
-        (str(a["value"]), a["date"].strftime("%Y-%m-%d"), int(a["start"]))
-        for a in applied
-    }
-    mask = df.apply(
-        lambda r: (str(r["value"]), r["date"].strftime("%Y-%m-%d"), int(r["start"]))
-        not in applied_keys,
-        axis=1,
-    )
-    return df[mask]
 
 
 def add_lottery(rules: list[dict], group_id: str, dry_run: bool = False):

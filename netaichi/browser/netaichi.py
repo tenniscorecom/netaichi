@@ -7,7 +7,7 @@ import pandas as pd
 from datetime import datetime as dd
 import re
 import time
-from netaichi.helper import sqlmodel_to_df
+from netaichi.helper import filter_applied, sqlmodel_to_df
 from netaichi.config import IS_HEADLESS
 
 
@@ -81,6 +81,15 @@ class NetAichi(Jsp):
             ).all()
 
         df = sqlmodel_to_df(lottery_data)
+
+        # このアカウントの申込済み一覧と突合し、重複する枠は申し込まない
+        applied = self.get.lottery()
+        before = len(df)
+        df = filter_applied(df, applied)
+        self.logger.info(f"申込済みのため除外: {before - len(df)}件 / 申込対象: {len(df)}件")
+        if df.empty:
+            self.logger.info("新規に申し込む枠はありません")
+            return
 
         for value, group in df.groupby("value"):
             self.go.mypage().lottery()
