@@ -110,7 +110,14 @@ def _collect_rule_slots(browser, rule: dict, dates: list[datetime]) -> list[dict
             park["keyword"], dates, park.get("court_filter")
         )
         park_slots = [s for s in park_slots if in_time_ranges(s, rule["times"])]
-        if not park.get("show_court", True):
+        show_court = park.get("show_court", True)
+        if show_court == "group":
+            # コート番号は落とし、court_filterの種別（庭球場/フットサル等）だけ残す
+            for s in park_slots:
+                s["facility"] = next(
+                    (f for f in park["court_filter"] if f in s["facility"]), ""
+                )
+        elif not show_court:
             for s in park_slots:
                 s["facility"] = ""
         if not park.get("show_hall", True):

@@ -9,7 +9,8 @@
 #   parks:  チェック対象施設リスト
 #     keyword:      施設名検索のキーワード
 #     court_filter: 施設名にこれを含むもののみ対象
-#     show_court:   falseならコート名を通知に出さず日付・時間だけにまとめる
+#     show_court:   false=コート名なしで日付・時間だけにまとめる
+#                   group=コート番号は落としcourt_filterの種別だけ表示
 #     show_hall:    falseなら館名を出さずコート名だけで表示（例: 香久山テニス１）
 #   days:   weekend_holiday（土日祝）または曜日リスト（月=0,火=1,...,日=6）
 #   times:  この時間範囲に重なる空きを通知する [[開始, 終了], ...]
@@ -24,7 +25,7 @@ rules:
         court_filter: [庭球場]
       - keyword: 愛・地球博記念公園
         court_filter: [庭球場, フットサル]
-        show_court: false  # コート番号は出さず日付・時間だけにまとめる
+        show_court: group  # コート番号は出さず種別（庭球場/フットサル）だけ表示
       - keyword: 愛知県森林公園
         court_filter: [コート]
         show_court: false  # あまり使わないので日付・時間だけ通知
