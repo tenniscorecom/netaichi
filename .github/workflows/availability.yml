@@ -2,7 +2,9 @@ name: availability-check
 
 on:
   schedule:
-    - cron: '*/15 * * * *'
+    # 平日夜モリコロの追加でチェックに15分以上かかるため30分間隔
+    # （毎時0分はGitHub側の混雑で遅延しやすいためずらす）
+    - cron: '5,35 * * * *'
   workflow_dispatch:
 
 # 前のrunが終わる前に次が始まらないようにする（重複通知・シート競合防止）
@@ -13,7 +15,7 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 14
+    timeout-minutes: 28
 
     env:
       TZ: Asia/Tokyo
