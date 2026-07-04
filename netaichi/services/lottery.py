@@ -88,14 +88,38 @@ def get_group_accounts(group_id: str) -> list[M_Account]:
         ).all()
 
 
+def filter_applied(df, applied: list[dict]):
+    """申込済みの (コート, 日付, 開始時) と重複する行を除外する（純粋関数）"""
+    if df.empty or not applied:
+        return df
+    applied_keys = {
+        (str(a["value"]), a["date"].strftime("%Y-%m-%d"), int(a["start"]))
+        for a in applied
+    }
+    mask = df.apply(
+        lambda r: (str(r["value"]), r["date"].strftime("%Y-%m-%d"), int(r["start"]))
+        not in applied_keys,
+        axis=1,
+    )
+    return df[mask]
+
+
 def add_lottery(rules: list[dict], group_id: str, dry_run: bool = False):
-    """マスターアカウントでルール分の抽選を申し込む"""
+    """マスターアカウントでルール分の抽選を申し込む（申込済みはスキップ）"""
     data = build_lottery_data(rules, lottery_month_dates(), group_id)
     if not data:
         return
     df = sqlmodel_to_df(data)
     with NetAichi(IS_HEADLESS, dry_run=dry_run) as na:
         na.login(id=group_id)
+        # 抽選申込一覧を照会し、既に申込済みの枠は除外する（重複申込防止）
+        applied = na.get.lottery()
+        before = len(df)
+        df = filter_applied(df, applied)
+        na.logger.info(f"申込済みのため除外: {before - len(df)}件 / 申込対象: {len(df)}件")
+        if df.empty:
+            na.logger.info("新規に申し込む枠はありません")
+            return
         na.add_lottery(df)
 
 
