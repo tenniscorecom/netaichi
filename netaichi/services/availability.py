@@ -43,8 +43,9 @@ def merge_hour_slots(slots: list[dict]) -> list[dict]:
         key = (s["value"], s["date"], s.get("facility", ""))
         groups.setdefault(key, [])
         ranges = groups[key]
-        if ranges and ranges[-1]["end"] == s["start"]:
-            ranges[-1]["end"] = s["end"]
+        # 連続・重複する時間帯はまとめる（コート名なし運用では同時間帯が重複しうる）
+        if ranges and s["start"] <= ranges[-1]["end"]:
+            ranges[-1]["end"] = max(ranges[-1]["end"], s["end"])
         else:
             ranges.append({
                 "value": s["value"],
@@ -111,6 +112,9 @@ def check(
                     park["keyword"], dates, park.get("court_filter")
                 )
                 park_slots = [s for s in park_slots if in_time_ranges(s, rule["times"])]
+                if not park.get("show_court", True):
+                    for s in park_slots:
+                        s["facility"] = ""
                 na.logger.info(
                     f"[{rule.get('name', '')}] {park['keyword']}: {len(park_slots)}件"
                 )

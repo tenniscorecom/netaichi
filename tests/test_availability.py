@@ -33,6 +33,20 @@ class TestMergeHourSlots:
         assert {m["facility"] for m in merged} == {"庭球場１", "庭球場２"}
 
 
+
+    def test_same_time_without_facility_deduped(self):
+        # show_court: false の施設はfacilityが空になり、同時間帯の複数コートは1件にまとまる
+        date = datetime(2026, 10, 3)
+        slots = [
+            {"value": "森林公園", "date": date, "start": 9, "end": 10, "facility": ""},
+            {"value": "森林公園", "date": date, "start": 9, "end": 10, "facility": ""},
+            {"value": "森林公園", "date": date, "start": 10, "end": 11, "facility": ""},
+        ]
+        merged = merge_hour_slots(slots)
+        assert len(merged) == 1
+        assert (merged[0]["start"], merged[0]["end"]) == (9, 11)
+
+
 class TestTargetDates:
     def test_weekend_holiday_only(self):
         conf = {"days": "weekend_holiday", "months_ahead": 1}
