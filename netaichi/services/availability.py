@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 import yaml
 from dateutil.relativedelta import relativedelta
 
-from netaichi.browser import EAichi, NetAichi
+from netaichi.browser import EAichi, NagoyaSporec, NetAichi
 from netaichi.config import IS_HEADLESS, OGURI_GSS_ID, RULES_DIR
 from netaichi.helper import SpreadSheet
 from netaichi.notify import notify
@@ -75,7 +75,7 @@ def diff_slots(
     return new, gone
 
 
-SITE_LABELS = {"netaichi": "県営", "eaichi": "日進"}
+SITE_LABELS = {"netaichi": "県営", "eaichi": "日進", "nagoya": "名古屋"}
 
 
 def format_message(
@@ -144,6 +144,7 @@ def check(
     fetch_time = datetime.now()
     netaichi_rules = [r for r in rules if r.get("site", "netaichi") == "netaichi"]
     eaichi_rules = [r for r in rules if r.get("site") == "eaichi"]
+    nagoya_rules = [r for r in rules if r.get("site") == "nagoya"]
 
     slots = []
     if netaichi_rules:
@@ -158,6 +159,21 @@ def check(
             for rule in eaichi_rules:
                 ea.municipality = rule["municipality"]
                 slots += _collect_rule_slots(ea, rule, _rule_dates(rule, today, end_date))
+
+    if nagoya_rules:
+        # 名古屋市スポレクもログイン不要。施設はコード指定で照会する
+        with NagoyaSporec(headless) as ns:
+            for rule in nagoya_rules:
+                dates = _rule_dates(rule, today, end_date)
+                for park in rule["parks"]:
+                    park_slots = ns.find_available_slots(
+                        park["code"], park["keyword"], dates
+                    )
+                    park_slots = [s for s in park_slots if in_time_ranges(s, rule["times"])]
+                    ns.logger.info(
+                        f"[{rule.get('name', '')}] {park['keyword']}: {len(park_slots)}件"
+                    )
+                    slots += park_slots
 
     current = merge_hour_slots(slots)
 

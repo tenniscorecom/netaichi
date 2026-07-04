@@ -46,3 +46,21 @@ rules:
         court_filter: [テニス, コート]
     days: [0, 1, 2, 3, 4]
     times: [[19, 24]]
+  - name: 名古屋 土日祝
+    site: nagoya
+    parks:
+      - keyword: 若宮大通公園テニスコート
+        code: "4001"
+      - keyword: 猪高緑地テニスコート
+        code: "4802"
+      - keyword: 細口池公園テニスコート
+        code: "4902"
+    days: weekend_holiday
+    times: [[9, 17]]
+  - name: 細口池 平日夜間
+    site: nagoya
+    parks:
+      - keyword: 細口池公園テニスコート
+        code: "4902"
+    days: [0, 1, 2, 3, 4]
+    times: [[17, 24]]  # 夜間枠は17:00-20:30

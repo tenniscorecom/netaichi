@@ -1,15 +1,15 @@
-name: availability-eaichi
+name: availability-cities
 
 on:
   schedule:
-    # 日進市（e-aichi）は施設が少なく速いので15分間隔
+    # 市営施設（日進・名古屋）は施設が少なく速いので15分間隔
     # （毎時0分はGitHub側の混雑で遅延しやすいためずらす）
     - cron: '3,18,33,48 * * * *'
   workflow_dispatch:
 
 # 前のrunが終わる前に次が始まらないようにする（重複通知・シート競合防止）
 concurrency:
-  group: availability-eaichi
+  group: availability-cities
   cancel-in-progress: false
 
 jobs:
@@ -33,7 +33,7 @@ jobs:
 
       - run: poetry install --no-root
 
-      - run: poetry run python -m netaichi availability --headless --sites eaichi
+      - run: poetry run python -m netaichi availability --headless --sites eaichi,nagoya
         env:
           NETAICHI_DEFAULT_PW: ${{ secrets.NETAICHI_DEFAULT_PW }}
           OGURI_ACCOUNT_ID: ${{ secrets.OGURI_ACCOUNT_ID }}
