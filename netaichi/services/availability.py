@@ -113,6 +113,11 @@ def _collect_rule_slots(browser, rule: dict, dates: list[datetime]) -> list[dict
         if not park.get("show_court", True):
             for s in park_slots:
                 s["facility"] = ""
+        if not park.get("show_hall", True):
+            # 館名は出さずコート名だけで表示する（例: 香久山テニス１）
+            for s in park_slots:
+                s["value"] = s.get("facility") or s["value"]
+                s["facility"] = ""
         browser.logger.info(
             f"[{rule.get('name', '')}] {park['keyword']}: {len(park_slots)}件"
         )

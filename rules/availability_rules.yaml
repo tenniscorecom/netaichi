@@ -10,6 +10,7 @@
 #     keyword:      施設名検索のキーワード
 #     court_filter: 施設名にこれを含むもののみ対象
 #     show_court:   falseならコート名を通知に出さず日付・時間だけにまとめる
+#     show_hall:    falseなら館名を出さずコート名だけで表示（例: 香久山テニス１）
 #   days:   weekend_holiday（土日祝）または曜日リスト（月=0,火=1,...,日=6）
 #   times:  この時間範囲に重なる空きを通知する [[開始, 終了], ...]
 account: oguri
@@ -34,8 +35,10 @@ rules:
     parks:
       - keyword: 市営テニスコート
         court_filter: [西山, 香久山]  # 藤島は対象外
+        show_hall: false  # 館名を出さずコート名（西山テニス等）だけで表示
       - keyword: 上納池テニスコート
         court_filter: [テニス, コート]
+        show_hall: false
     days: weekend_holiday
     times: [[9, 17]]
   - name: 上納池 平日夜
@@ -44,6 +47,7 @@ rules:
     parks:
       - keyword: 上納池テニスコート
         court_filter: [テニス, コート]
+        show_hall: false
     days: [0, 1, 2, 3, 4]
     times: [[19, 24]]
   - name: 名古屋 土日祝
