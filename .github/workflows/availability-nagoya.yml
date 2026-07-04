@@ -1,16 +1,14 @@
-name: availability-cities
+name: availability-nagoya
 
 on:
   schedule:
-    # 市営施設（日進・名古屋）は施設が少なく速いので15分間隔
-    # 実行はJST 8時〜24時のみ（UTC 23時,0〜14時 = JST 8:00〜23:59）
-    # （毎時0分はGitHub側の混雑で遅延しやすいためずらす）
+    # 名古屋市はJST 8時〜24時のみ（UTC 23時,0〜14時）・15分間隔
     - cron: '3,18,33,48 0-14,23 * * *'
   workflow_dispatch:
 
 # 前のrunが終わる前に次が始まらないようにする（重複通知・シート競合防止）
 concurrency:
-  group: availability-cities
+  group: availability-nagoya
   cancel-in-progress: false
 
 jobs:
@@ -34,7 +32,7 @@ jobs:
 
       - run: poetry install --no-root
 
-      - run: poetry run python -m netaichi availability --headless --sites eaichi,nagoya
+      - run: poetry run python -m netaichi availability --headless --sites nagoya
         env:
           NETAICHI_DEFAULT_PW: ${{ secrets.NETAICHI_DEFAULT_PW }}
           OGURI_ACCOUNT_ID: ${{ secrets.OGURI_ACCOUNT_ID }}

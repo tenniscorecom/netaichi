@@ -1,0 +1,45 @@
+name: availability-nisshin
+
+on:
+  schedule:
+    # 日進市（e-aichi）は24時間・15分間隔（毎時0分は混雑回避でずらす）
+    - cron: '3,18,33,48 * * * *'
+  workflow_dispatch:
+
+# 前のrunが終わる前に次が始まらないようにする（重複通知・シート競合防止）
+concurrency:
+  group: availability-nisshin
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+
+    env:
+      TZ: Asia/Tokyo
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: browser-actions/setup-chrome@v1
+
+      - run: pip install poetry
+
+      - run: poetry install --no-root
+
+      - run: poetry run python -m netaichi availability --headless --sites eaichi
+        env:
+          NETAICHI_DEFAULT_PW: ${{ secrets.NETAICHI_DEFAULT_PW }}
+          OGURI_ACCOUNT_ID: ${{ secrets.OGURI_ACCOUNT_ID }}
+          KOMADA_ACCOUNT_ID: ${{ secrets.KOMADA_ACCOUNT_ID }}
+          OGURI_GSS_ID: ${{ secrets.OGURI_GSS_ID }}
+          KOMADA_GSS_ID: ${{ secrets.KOMADA_GSS_ID }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          TENNISBEAR_EMAIL: ${{ secrets.TENNISBEAR_EMAIL }}
+          TENNISBEAR_PW: ${{ secrets.TENNISBEAR_PW }}
+          GSS_CREDENTIALS_JSON: ${{ secrets.GSS_CREDENTIALS_JSON }}
