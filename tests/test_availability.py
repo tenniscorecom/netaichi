@@ -3,7 +3,6 @@ from datetime import datetime
 
 from netaichi.services.availability import (
     diff_slots,
-
     format_message,
     in_time_ranges,
     merge_hour_slots,
@@ -22,14 +21,16 @@ class TestMergeHourSlots:
         merged = merge_hour_slots(slots)
         assert {(m["start"], m["end"]) for m in merged} == {(9, 11), (13, 14)}
 
-    def test_same_range_across_facilities_deduped(self):
+    def test_facilities_kept_separate(self):
+        # コート番号を表示するため、施設（コート）ごとに別の枠として扱う
         date = datetime(2026, 10, 3)
         slots = [
             {"value": "大高緑地", "date": date, "start": 9, "end": 10, "facility": "庭球場１"},
             {"value": "大高緑地", "date": date, "start": 9, "end": 10, "facility": "庭球場２"},
         ]
         merged = merge_hour_slots(slots)
-        assert len(merged) == 1
+        assert len(merged) == 2
+        assert {m["facility"] for m in merged} == {"庭球場１", "庭球場２"}
 
 
 class TestTargetDates:
@@ -59,20 +60,22 @@ class TestInTimeRanges:
 
 
 class TestDiffSlots:
-    def _slot(self, value, day, start, end=None):
-        return {"value": value, "date": datetime(2026, 10, day), "start": start, "end": end or start + 2}
+    def _slot(self, value, day, start, end=None, facility=""):
+        return {
+            "value": value,
+            "date": datetime(2026, 10, day),
+            "start": start,
+            "end": end or start + 2,
+            "facility": facility,
+        }
 
     def test_new_slot_detected(self):
-        current = [self._slot("大高緑地", 3, 9)]
-        previous = []
-        new, gone = diff_slots(current, previous)
+        new, gone = diff_slots([self._slot("大高緑地", 3, 9)], [])
         assert len(new) == 1
         assert len(gone) == 0
 
     def test_gone_slot_detected(self):
-        current = []
-        previous = [self._slot("大高緑地", 3, 9)]
-        new, gone = diff_slots(current, previous)
+        new, gone = diff_slots([], [self._slot("大高緑地", 3, 9)])
         assert len(new) == 0
         assert len(gone) == 1
 
@@ -81,6 +84,14 @@ class TestDiffSlots:
         new, gone = diff_slots([slot], [slot])
         assert len(new) == 0
         assert len(gone) == 0
+
+    def test_facility_difference_detected(self):
+        # 同じ時間でもコートが違えば別の枠として扱う
+        prev = [self._slot("大高緑地", 3, 9, facility="庭球場１")]
+        curr = [self._slot("大高緑地", 3, 9, facility="庭球場２")]
+        new, gone = diff_slots(curr, prev)
+        assert len(new) == 1
+        assert len(gone) == 1
 
     def test_mixed(self):
         prev = [self._slot("大高緑地", 3, 9), self._slot("小幡緑地", 4, 13)]
@@ -91,14 +102,20 @@ class TestDiffSlots:
 
 
 class TestFormatMessage:
-    def test_sorted_and_named(self):
+    def test_sorted_by_park_date_time_and_court_shown(self):
         slots = [
-            {"value": "小幡緑地", "date": datetime(2026, 10, 4), "start": 13, "end": 15},
-            {"value": "大高緑地", "date": datetime(2026, 10, 3), "start": 9, "end": 11},
+            {"value": "小幡緑地", "date": datetime(2026, 10, 4), "start": 13, "end": 15, "facility": "庭球場３"},
+            {"value": "大高緑地", "date": datetime(2026, 10, 3), "start": 9, "end": 11, "facility": "庭球場１"},
         ]
-        message = format_message(slots)
+        message = format_message(slots, fetch_time=datetime(2026, 10, 3, 12, 0))
         lines = message.split("\n")
-        assert "空き" in lines[0]
-        assert lines[1] == "・10/03(土) 9-11時 大高緑地"
-        assert lines[2] == "・10/04(日) 13-15時 小幡緑地"
+        assert "現在の空き" in lines[0]
+        assert "[2件]" in lines[0]
+        assert "10/03 12:00" in lines[0]
+        assert lines[1] == "・大高緑地 10/03(土) 9-11時 庭球場１"
+        assert lines[2] == "・小幡緑地 10/04(日) 13-15時 庭球場３"
 
+    def test_facility_optional(self):
+        slots = [{"value": "大高緑地", "date": datetime(2026, 10, 3), "start": 9, "end": 11}]
+        message = format_message(slots, fetch_time=datetime(2026, 10, 3, 12, 0))
+        assert "・大高緑地 10/03(土) 9-11時" in message

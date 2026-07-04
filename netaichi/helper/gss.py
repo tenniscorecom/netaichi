@@ -109,22 +109,27 @@ class SpreadSheet:
                         "date": datetime.strptime(row[1], "%Y-%m-%d"),
                         "start": int(row[2]),
                         "end": int(row[3]),
+                        "facility": row[4] if len(row) > 4 else "",
                     })
                 except (ValueError, IndexError):
                     pass
         return result
 
     def set_current_slots(self, slots: list[dict]) -> None:
-        """シートを今回の空き枠で上書きする"""
+        """シートを今回の空き枠で上書きする（clear→writeの順でアトミックに近い形で実行）"""
         sheet = self._get_or_create_sheet(Sheets.AVAILABILITY)
-        sheet.clear()
-        if not slots:
-            return
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if not slots:
+            sheet.clear()
+            return
         rows = [
-            [s["value"], s["date"].strftime("%Y-%m-%d"), str(s["start"]), str(s["end"]), now]
+            [s["value"], s["date"].strftime("%Y-%m-%d"), str(s["start"]), str(s["end"]),
+             s.get("facility", ""), now]
             for s in slots
         ]
+        # 既存行数より多い場合に備えてリサイズしてからupdate（clear不要でwindowを最小化）
+        sheet.resize(rows=len(rows) + 1)
+        sheet.clear()
         sheet.append_rows(rows)
 
 

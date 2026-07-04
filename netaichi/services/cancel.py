@@ -69,6 +69,14 @@ def format_warning_message(targets: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def format_held_message(targets: list[dict]) -> str:
+    lines = ["🚨 テニスベアの削除に失敗（申込みが入った可能性）手動で確認してください"]
+    for ev in targets:
+        w = WEEKDAY[ev["date"].weekday()]
+        lines.append(f"・{ev['date']:%m/%d}({w}) {ev['start']}時 {ev['court']}")
+    return "\n".join(lines)
+
+
 def run(
     target_date: datetime | None = None,
     execute: bool = True,
@@ -87,14 +95,15 @@ def run(
         tb.login()
         events = tb.list_organized_events()
 
-        # 1日後: キャンセル実行
-        cancel_date = target_date if target_date else today + timedelta(days=conf.get("days_before", 1))
+        # days_before日後（テニスベア締切と同日）: キャンセル実行
+        days_before = conf.get("days_before", 2)
+        cancel_date = target_date if target_date else today + timedelta(days=days_before)
         targets = find_empty_lessons(events, cancel_date) + find_solo_practices(events, cancel_date)
 
-        # 2日後: 通知のみ（target_date指定時はスキップ）
+        # その1日先: 通知のみ（target_date指定時はスキップ）
         warn_targets = []
         if target_date is None:
-            warn_date = today + timedelta(days=2)
+            warn_date = today + timedelta(days=days_before + 1)
             warn_targets = find_empty_lessons(events, warn_date) + find_solo_practices(events, warn_date)
 
         cancelled = []
@@ -112,13 +121,23 @@ def run(
                     if na.cancel_reservation(ev["date"], ev["start"], keyword):
                         cancelled.append(ev)
 
-        # コート取消に成功した分だけテニスベアの募集も削除する
+        # コート取消に成功した分だけテニスベアの募集も削除する。
+        # 削除に失敗した場合（申込みが入った等）は保留にして別途通知する
+        held = []
         if execute:
             for ev in cancelled:
-                tb.delete_event(ev["id"])
+                try:
+                    ok = tb.delete_event(ev["id"])
+                except Exception as e:
+                    tb.logger.error(f"テニスベア削除エラー {ev['id']}: {e}")
+                    ok = False
+                if not ok:
+                    held.append(ev)
 
     if execute and cancelled:
         notify(format_message(cancelled))
+    if execute and held:
+        notify(format_held_message(held))
     if execute and warn_targets:
         notify(format_warning_message(warn_targets))
     return cancelled, warn_targets

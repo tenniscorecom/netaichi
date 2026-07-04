@@ -171,9 +171,12 @@ class NetAichi(Jsp):
         for date in dates:
             try:
                 self.go.change_calendar_date(date)
-                slots += self.__parse_vacant_slots(park_keyword, date, court_filter)
+                day_slots = self.__parse_vacant_slots(park_keyword, date, court_filter)
+                self.logger.debug(f"{park_keyword} {date:%Y-%m-%d}: {len(day_slots)}件")
+                slots += day_slots
             except Exception as e:
                 self.logger.error(f"空き取得エラー {park_keyword} {date:%Y-%m-%d}: {e}")
+        self.logger.info(f"{park_keyword} 合計取得: {len(slots)}件 (filter={court_filter})")
         return slots
 
     def __go_name_search(self) -> bool:
@@ -197,6 +200,9 @@ class NetAichi(Jsp):
         """
         slots = []
         seen = set()
+        # 前の日付のパースでページ送りした位置が残っていることがあるため、
+        # 必ず1ページ目に戻してから読み始める（ページャがない施設では何もしない）
+        self.js_exec("if (typeof movePage === 'function') { movePage(1); }")
         for page in range(1, 11):  # 無限ループ防止
             if page > 1:
                 self.js_exec(f"movePage({page});")

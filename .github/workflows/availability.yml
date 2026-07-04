@@ -5,9 +5,18 @@ on:
     - cron: '*/15 * * * *'
   workflow_dispatch:
 
+# 前のrunが終わる前に次が始まらないようにする（重複通知・シート競合防止）
+concurrency:
+  group: availability-check
+  cancel-in-progress: false
+
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 14
+
+    env:
+      TZ: Asia/Tokyo
 
     steps:
       - uses: actions/checkout@v4
