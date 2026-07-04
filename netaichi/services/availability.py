@@ -129,6 +129,7 @@ def check(
     notify_enabled: bool = True,
     headless: bool = IS_HEADLESS,
     sites: list[str] | None = None,
+    days_ahead: int | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """空き状況をチェックして通知する。
 
@@ -136,11 +137,16 @@ def check(
         sites: チェックするサイトのリスト（例: ["netaichi"]）。
                Noneなら全サイト。ワークフローを分割して並列実行するために使う。
                サイトごとに状態保存シートを分けているので並列実行しても競合しない。
+        days_ahead: 指定すると今日からこの日数先までに限定してチェックする
+               （直近だけを高頻度で回す用。変化があった時だけ通知する）。
     """
     conf = load_rules()
     months_ahead = conf.get("months_ahead", 2)
     today = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
-    end_date = today + relativedelta(months=months_ahead)
+    if days_ahead is not None:
+        end_date = today + timedelta(days=days_ahead)
+    else:
+        end_date = today + relativedelta(months=months_ahead)
 
     rules = conf["rules"]
     if sites is not None:
@@ -187,12 +193,22 @@ def check(
         "【" + "・".join(SITE_LABELS.get(s, s) for s in sorted(sites)) + "】"
         if sites else ""
     )
+    if days_ahead is not None:
+        sheet_name += f"[直近{days_ahead}日]"
+        label = f"【直近{days_ahead}日】"
     ss = SpreadSheet(OGURI_GSS_ID)
     previous = ss.get_current_slots(sheet_name)
-    _, gone = diff_slots(current, previous)
+    new, gone = diff_slots(current, previous)
 
     if notify_enabled:
-        if current:
+        if days_ahead is not None:
+            # 高頻度チェックは変化があった時だけ通知する（毎回だとうるさい）
+            if new or gone:
+                if current:
+                    notify(format_message(current, fetch_time, label))
+                else:
+                    notify(f"❌ 現在空きなし{label}")
+        elif current:
             notify(format_message(current, fetch_time, label))
         elif gone:
             notify(f"❌ 現在空きなし{label}")

@@ -2,9 +2,9 @@ name: availability-check
 
 on:
   schedule:
-    # 1回のチェックに約15分かかるため20分間隔
+    # フル走査（2ヶ月先まで）は1時間に1回。直近は availability-soon が15分間隔で見る
     # （毎時0分はGitHub側の混雑で遅延しやすいためずらす）
-    - cron: '7,27,47 * * * *'
+    - cron: '7 * * * *'
   workflow_dispatch:
 
 # 前のrunが終わる前に次が始まらないようにする（重複通知・シート競合防止）

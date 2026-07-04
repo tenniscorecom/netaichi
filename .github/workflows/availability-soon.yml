@@ -1,14 +1,14 @@
-name: availability-nagoya
+name: availability-soon
 
 on:
   schedule:
-    # フル走査は1時間に1回、JST 8時〜24時のみ（UTC 23時,0〜14時）
-    - cron: '43 0-14,23 * * *'
+    # 直近7日分だけを全サイトまとめて15分間隔でチェック（今週の土日祝の空きを素早く掴む）
+    # JST 8時〜24時のみ（UTC 23時,0〜14時）。変化があった時だけ通知する
+    - cron: '5,20,35,50 0-14,23 * * *'
   workflow_dispatch:
 
-# 前のrunが終わる前に次が始まらないようにする（重複通知・シート競合防止）
 concurrency:
-  group: availability-nagoya
+  group: availability-soon
   cancel-in-progress: false
 
 jobs:
@@ -32,7 +32,7 @@ jobs:
 
       - run: poetry install --no-root
 
-      - run: poetry run python -m netaichi availability --headless --sites nagoya
+      - run: poetry run python -m netaichi availability --headless --days-ahead 7
         env:
           NETAICHI_DEFAULT_PW: ${{ secrets.NETAICHI_DEFAULT_PW }}
           OGURI_ACCOUNT_ID: ${{ secrets.OGURI_ACCOUNT_ID }}

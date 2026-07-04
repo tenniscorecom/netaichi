@@ -27,7 +27,11 @@ def main():
         "--headless", action="store_true", help="ブラウザ画面を表示せず実行（定期実行用）"
     )
     p_avail.add_argument(
-        "--sites", help="チェックするサイト（カンマ区切り: netaichi,eaichi。省略時は全サイト）"
+        "--sites", help="チェックするサイト（カンマ区切り: netaichi,eaichi,nagoya。省略時は全サイト）"
+    )
+    p_avail.add_argument(
+        "--days-ahead", type=int,
+        help="今日からこの日数先までに限定してチェック（直近の高頻度チェック用）",
     )
 
     p_bear = sub.add_parser("bear", help="予約確定分の募集をテニスベアに作成")
@@ -83,7 +87,10 @@ def main():
 
             sites = args.sites.split(",") if args.sites else None
             new, gone = check(
-                notify_enabled=not args.no_notify, headless=args.headless, sites=sites
+                notify_enabled=not args.no_notify,
+                headless=args.headless,
+                sites=sites,
+                days_ahead=args.days_ahead,
             )
             print(f"新規の空き: {len(new)}件")
             for slot in new:

@@ -2,8 +2,8 @@ name: availability-nisshin
 
 on:
   schedule:
-    # 日進市（e-aichi）は24時間・15分間隔（毎時0分は混雑回避でずらす）
-    - cron: '3,18,33,48 * * * *'
+    # フル走査は1時間に1回（24時間）。直近は availability-soon が15分間隔で見る
+    - cron: '23 * * * *'
   workflow_dispatch:
 
 # 前のrunが終わる前に次が始まらないようにする（重複通知・シート競合防止）
