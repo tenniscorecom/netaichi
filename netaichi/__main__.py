@@ -19,8 +19,9 @@ def main():
 
     p_lcancel = sub.add_parser("lottery-cancel", help="条件一致の抽選申込をグループ全アカウントで取消")
     p_lcancel.add_argument("group", choices=["oguri", "komada"], help="対象グループ")
-    p_lcancel.add_argument("--court", required=True, help="コートの施設値（例: 400）")
+    p_lcancel.add_argument("--court", help="コートの施設値（例: 400）。省略時は全コート対象")
     p_lcancel.add_argument("--start", type=int, help="開始時（例: 19）。省略時は時間を問わず対象")
+    p_lcancel.add_argument("--exclude-master", action="store_true", help="マスターアカウントは対象外にする")
     p_lcancel.add_argument("--dry-run", action="store_true", help="対象の表示のみ（取り消さない）")
 
     sub.add_parser("reserve", help="予約情報を収集しスプレッドシートに反映")
@@ -88,7 +89,11 @@ def main():
             from netaichi.services.lottery import cancel_group
 
             results = cancel_group(
-                args.group, args.court, args.start, dry_run=args.dry_run
+                args.group,
+                args.court,
+                args.start,
+                dry_run=args.dry_run,
+                exclude_master=args.exclude_master,
             )
             action = "取消対象" if args.dry_run else "取消済み"
             for account_id, items in results.items():

@@ -127,8 +127,11 @@ class NetAichi(Jsp):
         self.logger.info(self.get.lottery_status())
         self.logger.info(self.get.lottery_status_detail())
 
-    def cancel_lottery(self, court_value: str, start: int | None = None) -> list[dict]:
+    def cancel_lottery(
+        self, court_value: str | None = None, start: int | None = None
+    ) -> list[dict]:
         """抽選申込一覧から条件（コート、開始時）に一致する申込をすべて取り消す。
+        court_value=None なら全コートが対象。
 
         取り消すたびに一覧の行番号がずれるため、一致がなくなるまで
         一覧の走査からやり直す。
@@ -151,7 +154,7 @@ class NetAichi(Jsp):
         return cancelled
 
     def __find_lottery_row(
-        self, court_value: str, start: int | None
+        self, court_value: str | None, start: int | None
     ) -> tuple[int, dict] | None:
         """抽選申込一覧を走査し、条件一致する最初の行の（ページ内index, 情報）を返す"""
         for _ in self.go.lottery_list():
@@ -165,7 +168,9 @@ class NetAichi(Jsp):
                     continue  # 抽選済み等は取消不可
                 value = self.to_value(courts[i].text)
                 s = int(starts[i].text.removesuffix("時"))
-                if value == str(court_value) and (start is None or s == start):
+                if (court_value is None or value == str(court_value)) and (
+                    start is None or s == start
+                ):
                     return i, {"date": dates[i].text, "start": s, "court": courts[i].text}
         return None
 
