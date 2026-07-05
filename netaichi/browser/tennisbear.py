@@ -137,36 +137,52 @@ class TennisBear(ChromeBrowser):
         if today is None:
             today = datetime.today()
 
+        # 一覧は仮想スクロール（下に読み進めると先頭側はDOMから消える）のため、
+        # スクロールしながら表示中のイベントを逐次収集する
         events = []
         seen = set()
-        for a in self.driver.find_elements(By.CSS_SELECTOR, 'a[href*="/event/"]'):
-            href = a.get_attribute("href") or ""
-            m_id = re.search(r"/event/(\d+)/", href)
-            if not m_id or m_id.group(1) in seen:
-                continue
-            text = a.text
-            m_p = re.search(r"(\d+)人/(\d+)人", text)
-            m_d = re.search(r"(\d{1,2})/(\d{1,2})\(", text)
-            m_t = re.search(r"(\d{1,2}):(\d{2})", text)
-            if not (m_p and m_d and m_t):
-                continue
-            seen.add(m_id.group(1))
-            court = ""
-            cm = re.search(r"[都道府県]\s+(\S+)", text)
-            if cm:
-                court = cm.group(1)
-            events.append(
-                {
-                    "id": m_id.group(1),
-                    "date": self._resolve_date(int(m_d.group(1)), int(m_d.group(2)), today),
-                    "start": int(m_t.group(1)),
-                    "court": court,
-                    "participants": int(m_p.group(1)),
-                    "capacity": int(m_p.group(2)),
-                    "is_lesson": "シングルス実戦" in text,
-                    "is_practice": "シングルス練習" in text,
-                }
-            )
+        prev_seen = -1
+        stale = 0
+        for _ in range(60):
+            for a in self.driver.find_elements(By.CSS_SELECTOR, 'a[href*="/event/"]'):
+                href = a.get_attribute("href") or ""
+                m_id = re.search(r"/event/(\d+)/", href)
+                if not m_id or m_id.group(1) in seen:
+                    continue
+                text = a.text
+                m_p = re.search(r"(\d+)人/(\d+)人", text)
+                m_d = re.search(r"(\d{1,2})/(\d{1,2})\(", text)
+                m_t = re.search(r"(\d{1,2}):(\d{2})", text)
+                if not (m_p and m_d and m_t):
+                    continue
+                seen.add(m_id.group(1))
+                court = ""
+                cm = re.search(r"[都道府県]\s+(\S+)", text)
+                if cm:
+                    court = cm.group(1)
+                events.append(
+                    {
+                        "id": m_id.group(1),
+                        "date": self._resolve_date(int(m_d.group(1)), int(m_d.group(2)), today),
+                        "start": int(m_t.group(1)),
+                        "court": court,
+                        "participants": int(m_p.group(1)),
+                        "capacity": int(m_p.group(2)),
+                        "is_lesson": "シングルス実戦" in text,
+                        "is_practice": "シングルス練習" in text,
+                    }
+                )
+            # 仮想スクロールでは末尾まで一気に飛ばすと中間の日付を取りこぼすため、
+            # 1画面分ずつ送る。増分が数回連続でゼロになったら読み切ったとみなす
+            if len(seen) == prev_seen:
+                stale += 1
+                if stale >= 3:
+                    break
+            else:
+                stale = 0
+            prev_seen = len(seen)
+            self.driver.execute_script("window.scrollBy(0, window.innerHeight);")
+            time.sleep(1.2)
         return events
 
     @staticmethod
@@ -260,6 +276,50 @@ class TennisBear(ChromeBrowser):
             return False
         self._wait_render()
         self.logger.info(f"イベントを作成しました: {court_name} {start:%m/%d %H:%M}-{end:%H:%M}")
+        return True
+
+    def update_deadline(self, event_id: str, deadline: datetime, submit: bool = False) -> bool:
+        """作成済みイベントの申込期限・キャンセル期限を書き換える
+
+        編集画面(/event/{id}/edit)は作成画面と同じ4つのdate/time入力を持ち、
+        並びは [開始, 終了, 申込期限, キャンセル期限]。開始・終了はそのままに
+        期限2つだけ差し替え、「次へ」→確認ページの「変更を保存する」で確定する。
+        """
+        self.go_page(f"{self.BASE_URL}/event/{event_id}/edit")
+        self._wait_render(5)
+
+        for idx in (2, 3):  # 申込期限・キャンセル期限
+            fields = self.__visible(TennisBearSelector.DATE_INPUTS)
+            if len(fields) < 4:
+                self.logger.error(f"日付フィールドが想定数未満です: {len(fields)}")
+                return False
+            if not self._pick_date(fields[idx], deadline):
+                return False
+        for idx in (2, 3):
+            fields = self.__visible('input[placeholder="時間"]')
+            if len(fields) < 4:
+                self.logger.error(f"時間フィールドが想定数未満です: {len(fields)}")
+                return False
+            if not self._pick_time(fields[idx], deadline.hour, deadline.minute):
+                return False
+
+        if not self._click_button_by_text("次へ"):
+            return False
+        self._wait_render(4)
+
+        if "/event/confirm" not in self.current_url:
+            self.logger.error("編集の確認ページに遷移しませんでした（未入力の必須項目がある可能性）")
+            return False
+
+        if not submit:
+            self.logger.info(f"[確認モード] 締切変更を確認、保存せず終了: {event_id} → {deadline:%m/%d %H:%M}")
+            return True
+
+        if not self._click_button_by_text("変更を保存する"):
+            self.logger.error("確認ページの「変更を保存する」ボタンが見つかりませんでした")
+            return False
+        self._wait_render()
+        self.logger.info(f"締切を変更しました: {event_id} → {deadline:%m/%d %H:%M}")
         return True
 
     def delete_event(self, event_id: str, comment: str = "都合により削除させていただきます。") -> bool:

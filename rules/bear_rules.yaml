@@ -3,13 +3,17 @@
 # template_title: コピー元にする過去イベントのタイトル
 # event_hours: 1イベントの長さ（4時間の予約は2時間×2枠に分割される）
 # deadline_days_before: 申込期限 = レッスン日の何日前か（同時刻）
+# deadline_overrides: コート名(部分一致キー)ごとに締切日数を上書きする
 # submit: false の間は確認モード（フォーム入力まで行い、確定ボタンは押さない）
 # courts: 予約データのコート名(部分一致キー) → テニスベア上のコート名(照合用)
 template_title: 【初回割】シングルス実戦【最大4名】
 event_hours: 2
 deadline_days_before: 2
+deadline_overrides:
+  上納池: 9   # 日進市の施設は抽選が早く締まるため募集も早めに締め切る
 submit: false
 courts:
   大高緑地: 大高緑地
   モリコロ: モリコロパーク
   愛・地球博: モリコロパーク
+  上納池: 上納池

@@ -47,6 +47,13 @@ def main():
         help="確定まで実行する（未指定時は bear_rules.yaml の submit 設定に従う）",
     )
 
+    p_bdeadline = sub.add_parser(
+        "bear-deadline", help="締切上書き対象コート（上納池等）の既存募集の締切を揃える"
+    )
+    p_bdeadline.add_argument(
+        "--submit", action="store_true", help="実際に締切を変更する（未指定時は対象の表示のみ）"
+    )
+
     p_cancel = sub.add_parser(
         "cancel", help="翌日の集客0レッスンのコートを取消し、募集も削除"
     )
@@ -129,6 +136,17 @@ def main():
             print(f"{action}: {len(events)}件")
             for ev in events:
                 print(f"  {ev['date']:%m/%d} {ev['start']}-{ev['end']}時 {ev['bear_court']}（{ev['court']}）")
+        case "bear-deadline":
+            from netaichi.services.bear import sync_deadlines
+
+            targets = sync_deadlines(submit=args.submit)
+            action = "変更" if args.submit else "変更対象（確認のみ）"
+            print(f"{action}: {len(targets)}件")
+            for t in targets:
+                print(
+                    f"  {t['date']:%m/%d} {t['start']}時 {t['court']}"
+                    f"（参加{t['participants']}人）→ 締切 {t['deadline']:%m/%d %H:%M}"
+                )
         case "cancel":
             from netaichi.services.cancel import run
 

@@ -26,6 +26,10 @@ DISCORD_WEBHOOK_URL = os.environ.get('DISCORD_WEBHOOK_URL', '')
 TENNISBEAR_EMAIL = os.environ.get('TENNISBEAR_EMAIL', '')
 TENNISBEAR_PW = os.environ.get('TENNISBEAR_PW', '')
 
+# eあいち（市町村施設）アカウント
+EAICHI_ACCOUNT_ID = os.environ.get('EAICHI_ACCOUNT_ID', '')
+EAICHI_PW = os.environ.get('EAICHI_PW', '')
+
 IS_HEADLESS = os.environ.get("IS_HEADLESS", "") == "1"
 DB_PATH = str(ROOT_DIR / 'netaichi2024')
 LOGS_DIR = ROOT_DIR / 'logs'
