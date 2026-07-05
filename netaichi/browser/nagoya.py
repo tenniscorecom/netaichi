@@ -15,7 +15,8 @@ class NagoyaSporec(ChromeBrowser):
 
     「施設ごとの空き照会」(sp05001) で施設・種目・開始日を指定して照会すると、
     2週間分の空き表（行=時間帯、列=日付）が返る。ログイン不要。
-    セルは ×=埋まり、－=対象外、それ以外（○等）=空き。
+    セルは ×=埋まり、－=対象外、＝=照会可能期間外、それ以外（空き面数の数字等）=空き。
+    照会できるのは「抽選の終了した利用月」まで（例: 7月時点では8月末まで）。
     """
 
     URL = "https://www.net.city.nagoya.jp/cgi-bin/sp05001"
@@ -85,7 +86,7 @@ class NagoyaSporec(ChromeBrowser):
             if hours is None:
                 continue  # 曜日行・昼間などの包括枠はスキップ
             for date, cell in zip(dates, cells[1:]):
-                if date is None or cell in ("×", "－", ""):
+                if date is None or not self._cell_available(cell):
                     continue
                 slots.append({
                     "value": facility_name,
@@ -96,6 +97,11 @@ class NagoyaSporec(ChromeBrowser):
                 })
         last = max((d for d in dates if d), default=None)
         return slots, last
+
+    @staticmethod
+    def _cell_available(cell: str) -> bool:
+        """×=埋まり、－=対象外、＝=照会可能期間外、空=データなし。それ以外を空きとする"""
+        return cell not in ("×", "－", "＝", "")
 
     @staticmethod
     def _find_result_table(soup):

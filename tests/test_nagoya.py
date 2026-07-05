@@ -21,6 +21,25 @@ class TestParseTimeRange:
         assert NagoyaSporec._parse_time_range("日の出－０８：００（早朝夏）") is None
 
 
+class TestCellAvailable:
+    def test_count_is_available(self):
+        assert NagoyaSporec._cell_available("1")
+        assert NagoyaSporec._cell_available("2")
+
+    def test_full_is_not_available(self):
+        assert not NagoyaSporec._cell_available("×")
+
+    def test_excluded_is_not_available(self):
+        assert not NagoyaSporec._cell_available("－")
+
+    def test_out_of_period_is_not_available(self):
+        # 照会可能期間外（抽選が終わっていない月）のセルは「＝」で返る
+        assert not NagoyaSporec._cell_available("＝")
+
+    def test_empty_is_not_available(self):
+        assert not NagoyaSporec._cell_available("")
+
+
 class TestParseHeaderDates:
     def test_same_month(self):
         header = ["7月", "6", "7", "8"]
