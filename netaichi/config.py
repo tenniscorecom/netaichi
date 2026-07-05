@@ -26,7 +26,7 @@ DISCORD_WEBHOOK_URL = os.environ.get('DISCORD_WEBHOOK_URL', '')
 TENNISBEAR_EMAIL = os.environ.get('TENNISBEAR_EMAIL', '')
 TENNISBEAR_PW = os.environ.get('TENNISBEAR_PW', '')
 
-IS_HEADLESS = False
+IS_HEADLESS = os.environ.get("IS_HEADLESS", "") == "1"
 DB_PATH = str(ROOT_DIR / 'netaichi2024')
 LOGS_DIR = ROOT_DIR / 'logs'
 RULES_DIR = ROOT_DIR / 'rules'
