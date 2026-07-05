@@ -27,7 +27,7 @@ groups:
 
   komada:
     players: 9
-    start_account_id: "01154051"   # このIDのアカウントから処理を再開（nullなら先頭から）
+    start_account_id: null           # このIDのアカウントから処理を再開（nullなら先頭から）
     skip_alltime: "240"            # 申込合計時間がこの値のアカウントはスキップ
-    update_court_properties: true
+    update_court_properties: false
     rules: []                      # 申込データはマスターアカウントの登録内容をそのまま使う
