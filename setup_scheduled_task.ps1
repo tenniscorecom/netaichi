@@ -35,18 +35,7 @@ Register-ScheduledTask -TaskName "netaichi-daily" -Action $actionDaily -Trigger 
 Get-ScheduledTask -TaskName "netaichi-daily" | Select-Object TaskName, State
 Write-Host "毎日処理の登録完了。毎日朝9時に prune→cancel を実行します。"
 
-# 定刻ダイジェスト（毎日 朝5時）: 保存済みの最新空き状況をまとめて1通通知する。
-# 空き確認（availabilityの各タスク/GitHub Actions）が裏でシートを更新している前提。
-# 読み取り＋送信だけなので一瞬で終わり、5:00にほぼ正確に届く。時刻を変えるなら下の -At を編集する。
-$actionDigest = New-ScheduledTaskAction -Execute "F:\dev\netaichi\.venv\Scripts\python.exe" `
-    -Argument "-m netaichi digest" -WorkingDirectory "F:\dev\netaichi"
-
-$triggerDigest = New-ScheduledTaskTrigger -Daily -At 5:00AM
-
-$settingsDigest = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 5) -StartWhenAvailable
-
-Register-ScheduledTask -TaskName "netaichi-digest" -Action $actionDigest -Trigger $triggerDigest `
-    -Settings $settingsDigest -Description "毎朝5時: 保存済みの最新空き状況をまとめてDiscordに定刻通知" -Force
-
-Get-ScheduledTask -TaskName "netaichi-digest" | Select-Object TaskName, State
-Write-Host "定刻ダイジェストの登録完了。毎朝5:00ちょうどに現在の空き一覧を通知します。"
+# 定刻ダイジェストの自動通知は行わない方針（直近の通知は availability-soon が担当）。
+# 2ヶ月先までの一覧が見たいときは能動的に `python -m netaichi digest` を実行する。
+# 以前登録した定刻タスクが残っていれば削除する。
+try { Unregister-ScheduledTask -TaskName "netaichi-digest" -Confirm:$false -ErrorAction Stop } catch {}

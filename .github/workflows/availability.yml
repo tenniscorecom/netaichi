@@ -33,7 +33,9 @@ jobs:
 
       - run: poetry install --no-root
 
-      - run: poetry run python -m netaichi availability --headless --sites netaichi
+      # 通知はしない（直近の通知は availability-soon が担当）。ここは2ヶ月先までの
+      # スナップショットをシートに溜め、digest コマンドで能動的に見るための取得。
+      - run: poetry run python -m netaichi availability --headless --sites netaichi --no-notify
         env:
           NETAICHI_DEFAULT_PW: ${{ secrets.NETAICHI_DEFAULT_PW }}
           OGURI_ACCOUNT_ID: ${{ secrets.OGURI_ACCOUNT_ID }}
