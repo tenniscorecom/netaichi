@@ -41,6 +41,16 @@ def main():
         help="今日からこの日数先までに限定してチェック（直近の高頻度チェック用）",
     )
 
+    p_digest = sub.add_parser(
+        "digest", help="保存済みの最新空き状況をまとめて1通通知（定刻用・空き確認はしない）"
+    )
+    p_digest.add_argument(
+        "--no-notify", action="store_true", help="通知せず結果表示のみ（動作確認用）"
+    )
+    p_digest.add_argument(
+        "--sites", help="対象サイト（カンマ区切り: netaichi,eaichi,nagoya。省略時は全サイト）"
+    )
+
     p_bear = sub.add_parser("bear", help="予約確定分の募集をテニスベアに作成")
     p_bear.add_argument(
         "--submit", action="store_true",
@@ -127,6 +137,14 @@ def main():
                 print(f"  {slot['date']:%m/%d} {slot['start']}-{slot['end']}時 {slot['value']}")
             print(f"埋まった枠: {len(gone)}件")
             for slot in gone:
+                print(f"  {slot['date']:%m/%d} {slot['start']}-{slot['end']}時 {slot['value']}")
+        case "digest":
+            from netaichi.services.availability import send_digest
+
+            sites = args.sites.split(",") if args.sites else None
+            slots = send_digest(notify_enabled=not args.no_notify, sites=sites)
+            print(f"空き: {len(slots)}件")
+            for slot in slots:
                 print(f"  {slot['date']:%m/%d} {slot['start']}-{slot['end']}時 {slot['value']}")
         case "bear":
             from netaichi.services.bear import run

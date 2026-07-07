@@ -1,11 +1,13 @@
 """availability の純粋ロジック（対象日付・時間フィルタ・メッセージ整形）のテスト"""
 from datetime import datetime
 
+from netaichi.services import availability
 from netaichi.services.availability import (
     diff_slots,
     format_message,
     in_time_ranges,
     merge_hour_slots,
+    send_digest,
     target_dates,
 )
 
@@ -144,3 +146,43 @@ class TestFormatMessage:
         slots = [{"value": "大高緑地", "date": datetime(2026, 10, 3), "start": 9, "end": 11}]
         message = format_message(slots, fetch_time=datetime(2026, 10, 3, 12, 0))
         assert "　大高緑地 9-11時" in message
+
+
+class TestSendDigest:
+    def _patch(self, monkeypatch, sheets: dict):
+        """SpreadSheet と notify を差し替える。sheets: シート名→slotsリスト"""
+
+        class FakeSheet:
+            def get_current_slots(self, sheet_name=None):
+                return sheets.get(sheet_name, [])
+
+        monkeypatch.setattr(availability, "SpreadSheet", lambda _id: FakeSheet())
+        sent = []
+        monkeypatch.setattr(availability, "notify", lambda msg: sent.append(msg))
+        return sent
+
+    def test_combines_all_site_sheets(self, monkeypatch):
+        na = [{"value": "大高緑地", "date": datetime(2026, 10, 3), "start": 9, "end": 11, "facility": ""}]
+        ea = [{"value": "上納池", "date": datetime(2026, 10, 4), "start": 13, "end": 15, "facility": ""}]
+        sent = self._patch(monkeypatch, {
+            "通知済み空き(netaichi)": na,
+            "通知済み空き(eaichi)": ea,
+            "通知済み空き(nagoya)": [],
+        })
+        slots = send_digest()
+        assert len(slots) == 2
+        assert len(sent) == 1
+        assert "大高緑地" in sent[0] and "上納池" in sent[0]
+
+    def test_notifies_empty_when_no_slots(self, monkeypatch):
+        sent = self._patch(monkeypatch, {})
+        slots = send_digest()
+        assert slots == []
+        assert sent == ["❌ 現在空きなし"]
+
+    def test_no_notify_returns_without_sending(self, monkeypatch):
+        na = [{"value": "大高緑地", "date": datetime(2026, 10, 3), "start": 9, "end": 11, "facility": ""}]
+        sent = self._patch(monkeypatch, {"通知済み空き(netaichi)": na})
+        slots = send_digest(notify_enabled=False)
+        assert len(slots) == 1
+        assert sent == []

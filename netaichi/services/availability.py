@@ -230,3 +230,33 @@ def check(
 
     ss.set_current_slots(current, sheet_name)
     return current, gone
+
+
+# 定刻ダイジェストで読むフル走査シート（サイトごとに分かれている）
+DIGEST_SITES = ["netaichi", "eaichi", "nagoya"]
+
+
+def collect_snapshot(sites: list[str] | None = None) -> list[dict]:
+    """スクレイピングせず、保存済みの最新空き状況（フル走査シート）を結合して返す"""
+    ss = SpreadSheet(OGURI_GSS_ID)
+    slots = []
+    for site in sites or DIGEST_SITES:
+        slots += ss.get_current_slots(f"通知済み空き({site})")
+    return slots
+
+
+def send_digest(
+    notify_enabled: bool = True, sites: list[str] | None = None
+) -> list[dict]:
+    """定刻ダイジェスト。空き確認は行わず、直近のスクレイピング結果を1通にまとめて通知する。
+
+    空き確認（GitHub Actions等）が裏でシートを更新している前提。読み取り＋送信だけ
+    なので一瞬で終わり、起動時刻＝ほぼ通知時刻になる（定刻通知に向く）。
+    """
+    slots = collect_snapshot(sites)
+    if notify_enabled:
+        if slots:
+            notify(format_message(slots))
+        else:
+            notify("❌ 現在空きなし")
+    return slots
