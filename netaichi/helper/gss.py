@@ -1,6 +1,7 @@
 import json
 import os
 from datetime import datetime
+from time import sleep
 
 import gspread
 import pandas as pd
@@ -10,6 +11,21 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 from netaichi.config import GSS_KEYFILE
 from netaichi.db import M_Account
+
+
+def retry_api_error(func):
+    """Sheets APIの一時的なエラー（5xx等）なら少し待ってリトライする"""
+    def _wrapper(*args, **kwargs):
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
+            try:
+                return func(*args, **kwargs)
+            except gspread.exceptions.APIError as e:
+                # 4xxは何度やっても失敗するのでリトライしない
+                if 400 <= e.code < 500 or attempt == max_attempts:
+                    raise
+                sleep(15 * attempt)
+    return _wrapper
 
 
 class SpreadSheet:
@@ -28,6 +44,7 @@ class SpreadSheet:
         self.workbook_id = id
         self.open_workbook()
 
+    @retry_api_error
     def open_workbook(self):
         self.WORKBOOK = self.client.open_by_key(self.workbook_id)
         self.account_sheet = self.WORKBOOK.worksheet(Sheets.ACCOUNT)
@@ -96,6 +113,7 @@ class SpreadSheet:
             sheet = self.WORKBOOK.add_worksheet(title=name, rows=2000, cols=cols)
             return sheet
 
+    @retry_api_error
     def get_current_slots(self, sheet_name: str = None) -> list[dict]:
         """前回チェック時点の空き枠一覧を返す"""
         sheet = self._get_or_create_sheet(sheet_name or Sheets.AVAILABILITY)
@@ -115,6 +133,7 @@ class SpreadSheet:
                     pass
         return result
 
+    @retry_api_error
     def set_current_slots(self, slots: list[dict], sheet_name: str = None) -> None:
         """シートを今回の空き枠で上書きする（clear→writeの順でアトミックに近い形で実行）"""
         sheet = self._get_or_create_sheet(sheet_name or Sheets.AVAILABILITY)
