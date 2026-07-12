@@ -32,7 +32,13 @@ jobs:
 
       - run: poetry install --no-root
 
-      - run: poetry run python -m netaichi availability --headless --days-ahead 7
+      # cronの遅延で日付をまたぐと、なごやかネットが深夜メンテ中で必ず失敗するためスキップする
+      - run: |
+          if [ "$(TZ=Asia/Tokyo date +%-H)" -lt 8 ]; then
+            echo "JST深夜（なごやかネットのメンテ時間帯）のためスキップ"
+            exit 0
+          fi
+          poetry run python -m netaichi availability --headless --days-ahead 7
         env:
           NETAICHI_DEFAULT_PW: ${{ secrets.NETAICHI_DEFAULT_PW }}
           OGURI_ACCOUNT_ID: ${{ secrets.OGURI_ACCOUNT_ID }}
