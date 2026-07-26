@@ -7,6 +7,8 @@ import pandas as pd
 from datetime import datetime as dd
 import re
 import time
+from unicodedata import normalize
+
 from netaichi.helper import filter_applied, sqlmodel_to_df
 from netaichi.config import IS_HEADLESS
 
@@ -15,6 +17,9 @@ class NetAichi(Jsp):
     BASE_URL = "https://www4.pref.aichi.jp/yoyaku/"
     LOTTERY_MONTHS = 3
     DATE_TEMP = "%Y年%m月%d日"
+    TENNIS_FACILITY_PREFIX = "庭球場"
+    TENNIS_PURPOSE_VALUE = "1000-10000010"
+    RESERVATION_PLAYERS = 4
     USE_COURTS = [
         130,
         180,
@@ -356,9 +361,18 @@ class NetAichi(Jsp):
                 break
         return slots
 
-    def cancel_reservation(self, date: dd, start: int, court_keyword: str) -> bool:
-        """予約状況の一覧から (日付, 開始時, コート) 一致の予約を取り消す
+    def cancel_reservation(
+        self,
+        date: dd,
+        start: int,
+        end: int,
+        court_keyword: str,
+        court_number: str | None = None,
+    ) -> bool:
+        """(日付, コート, 面番号) 一致かつ start以上end未満に始まる予約を取り消す
 
+        実画面では4時間の予約も一覧に1行（13時～17時）で出るが、開始時ちょうどではなく
+        範囲で照合しておくことで、一覧が2時間ごとに分かれて表示されても取りこぼさない。
         「取消」ボタン押下で出る確認ダイアログをOKして確定する。
         キャンセル限界日を過ぎていると取消ボタンが無く、Falseを返す。
         """
@@ -370,32 +384,45 @@ class NetAichi(Jsp):
         link.click()
         time.sleep(2)
 
+        normalized_number = (
+            normalize("NFKC", court_number) if court_number is not None else None
+        )
         for page in range(1, 12):
             buttons = self.get_elements_by_css('input[value="選択"]')
             for btn in buttons:
                 tr = btn.find_element(By.XPATH, "./ancestor::tr[1]")
-                txt = " ".join(tr.text.split())
+                txt = normalize("NFKC", " ".join(tr.text.split()))
                 m = re.search(r"(\d{4})年(\d{1,2})月(\d{1,2})日.*?(\d{1,2})時", txt)
                 if not m:
                     continue
                 y, mo, d, h = map(int, m.groups())
-                if dd(y, mo, d) == date and h == start and court_keyword in txt:
-                    btn.click()
-                    time.sleep(2)
-                    cancel_btn = self.get_element_by_css('input[value="取消"]')
-                    if cancel_btn is None:
-                        self.logger.error(
-                            f"取消ボタンがありません（限界日超過の可能性）: "
-                            f"{date:%Y-%m-%d} {start}時 {court_keyword}"
-                        )
-                        return False
-                    cancel_btn.click()
-                    self.alert_switch(True)  # 確認ダイアログでOK＝取消確定
-                    time.sleep(2)
-                    self.logger.info(
-                        f"予約を取消しました: {date:%Y-%m-%d} {start}時 {court_keyword}"
+                facility_matches = (
+                    normalized_number is None
+                    or f"{self.TENNIS_FACILITY_PREFIX}{normalized_number}" in txt
+                )
+                if not (
+                    dd(y, mo, d) == date
+                    and start <= h < end
+                    and normalize("NFKC", court_keyword) in txt
+                    and facility_matches
+                ):
+                    continue
+                btn.click()
+                time.sleep(2)
+                cancel_btn = self.get_element_by_css('input[value="取消"]')
+                if cancel_btn is None:
+                    self.logger.error(
+                        f"取消ボタンがありません（限界日超過の可能性）: "
+                        f"{date:%Y-%m-%d} {h}時 {court_keyword}"
                     )
-                    return True
+                    return False
+                cancel_btn.click()
+                self.alert_switch(True)  # 確認ダイアログでOK＝取消確定
+                time.sleep(2)
+                self.logger.info(
+                    f"予約を取消しました: {date:%Y-%m-%d} {h}時 {court_keyword}"
+                )
+                return True
             nxt = self.get_elements_by_css("#goNextPager")
             if nxt and nxt[0].is_displayed():
                 self.js_exec(f"movePage({page + 1});")
@@ -403,9 +430,211 @@ class NetAichi(Jsp):
             else:
                 break
         self.logger.warning(
-            f"該当予約が見つかりません: {date:%Y-%m-%d} {start}時 {court_keyword}"
+            f"該当予約が見つかりません: {date:%Y-%m-%d} {start}-{end}時 {court_keyword}"
         )
         return False
+
+    def reserve_available_slot(
+        self,
+        date: dd,
+        start: int,
+        end: int,
+        court_name: str,
+        court_number: str,
+    ) -> bool:
+        """指定コートの空き時間を予約し、予約一覧への反映まで確認する"""
+        normalized_number = normalize("NFKC", court_number)
+        facility_keyword = f"{self.TENNIS_FACILITY_PREFIX}{normalized_number}"
+        submitted = False
+        try:
+            if not self.__search_and_select_park(
+                court_name,
+                [self.TENNIS_FACILITY_PREFIX],
+            ):
+                return False
+            self.go.change_calendar_date(date)
+            time.sleep(2)
+
+            slot_ids = self.__find_available_slot_ids(
+                date,
+                start,
+                end,
+                facility_keyword,
+            )
+            if not slot_ids:
+                self.logger.error(
+                    f"取り直す空き枠が見つかりません: "
+                    f"{date:%Y-%m-%d} {start}-{end}時 "
+                    f"{court_name} {facility_keyword}"
+                )
+                return False
+
+            for slot_id in slot_ids:
+                slot_input = self.get_element_by_css(f"#{slot_id}")
+                if slot_input is None:
+                    return False
+                parent = slot_input.find_element(By.XPATH, "..")
+                available_icon = parent.find_element(By.CSS_SELECTOR, 'img[alt="空き"]')
+                available_icon.click()
+                time.sleep(0.5)
+
+            if not self.click(Selector.BTN_CART_ADD):
+                return False
+            if not self.click(Selector.BTN_CART_CONFIRM):
+                return False
+            if not self.click(Selector.BTN_RESERVATION_PROCEED):
+                return False
+
+            purpose = self.get_element_by_css(Selector.SELECT_SPORTS)
+            players = self.get_element_by_css(Selector.SELECT_PLAYERS)
+            if purpose is None or players is None:
+                return False
+            self.select_by_value(purpose, self.TENNIS_PURPOSE_VALUE)
+            players.clear()
+            players.send_keys(str(self.RESERVATION_PLAYERS))
+
+            if not self.click(Selector.BTN_RESERVATION_CHECK):
+                return False
+            submitted = self.click(Selector.BTN_RESERVATION_CONFIRM)
+            if not submitted:
+                return False
+            time.sleep(2)
+            return self.__reservation_exists(
+                date,
+                start,
+                end,
+                court_name,
+                court_number,
+            )
+        except Exception:
+            self.logger.error(
+                f"コート予約の取り直しに失敗: "
+                f"{date:%Y-%m-%d} {start}-{end}時 "
+                f"{court_name} {facility_keyword}",
+                exc_info=True,
+            )
+            if submitted:
+                return self.__reservation_exists(
+                    date,
+                    start,
+                    end,
+                    court_name,
+                    court_number,
+                )
+            return False
+
+    def reset_reservation_session(self) -> bool:
+        """未確定の予約カートを破棄するため、ログアウトして再ログインする"""
+        account = self.logged_account
+        if account is None or not self.logout():
+            self.logger.error("予約カートを初期化できませんでした")
+            return False
+        self.go.last_page = None
+        return self.login(account=account)
+
+    def __find_available_slot_ids(
+        self,
+        date: dd,
+        start: int,
+        end: int,
+        facility_keyword: str,
+    ) -> list[str]:
+        """現在の検索結果から指定時間を連続して覆う空き枠IDを返す"""
+        target_date = date.strftime("%Y%m%d")
+        target_start = start * 100
+        target_end = end * 100
+
+        for page in range(1, 12):
+            if page > 1:
+                self.js_exec(f"movePage({page});")
+                time.sleep(1)
+            soup = self.get_html()
+            facility_names = {}
+            for checkbox in soup.select('input[name="chkIcd"]'):
+                label = checkbox.find_parent("label")
+                if label:
+                    facility_names[checkbox.get("value")] = normalize(
+                        "NFKC",
+                        label.get_text(strip=True),
+                    )
+
+            slots = []
+            for info in soup.select('input[name="selectInfo"]'):
+                parts = (info.get("value") or "").split(":")
+                if len(parts) < 6:
+                    continue
+                facility_name = facility_names.get(parts[1], "")
+                slot_start = int(parts[4])
+                slot_end = int(parts[5])
+                if (
+                    parts[2] != target_date
+                    or facility_keyword not in facility_name
+                    or slot_start < target_start
+                    or slot_end > target_end
+                ):
+                    continue
+                icon = info.find_previous_sibling("img")
+                if icon is None or icon.get("alt") != "空き":
+                    return []
+                slots.append((slot_start, slot_end, info.get("id")))
+
+            if slots:
+                slots.sort()
+                cursor = target_start
+                slot_ids = []
+                for slot_start, slot_end, slot_id in slots:
+                    if slot_start != cursor or slot_id is None:
+                        return []
+                    slot_ids.append(slot_id)
+                    cursor = slot_end
+                return slot_ids if cursor == target_end else []
+            if not soup.select("#goNextPager"):
+                break
+        return []
+
+    def __reservation_exists(
+        self,
+        date: dd,
+        start: int,
+        end: int,
+        court_name: str,
+        court_number: str,
+    ) -> bool:
+        """予約一覧に指定枠が反映されたか確認する"""
+        try:
+            self.go.last_page = None
+            reservations = self.get.reservation()
+            normalized_number = normalize("NFKC", court_number)
+            for row in reservations.itertuples():
+                reservation_date = pd.Timestamp(row.date).to_pydatetime()
+                if (
+                    reservation_date.date() == date.date()
+                    and int(row.start) == start
+                    and int(row.end) == end
+                    and normalize("NFKC", str(row.court))
+                    == normalize("NFKC", court_name)
+                    and normalize("NFKC", str(row.court_number)) == normalized_number
+                ):
+                    self.logger.info(
+                        f"コート予約を取り直しました: "
+                        f"{date:%Y-%m-%d} {start}-{end}時 "
+                        f"{court_name} 庭球場{court_number}"
+                    )
+                    return True
+            self.logger.error(
+                f"取り直した予約を一覧で確認できません: "
+                f"{date:%Y-%m-%d} {start}-{end}時 "
+                f"{court_name} 庭球場{court_number}"
+            )
+            return False
+        except Exception:
+            self.logger.error(
+                f"取り直した予約の確認中にエラー: "
+                f"{date:%Y-%m-%d} {start}-{end}時 "
+                f"{court_name} 庭球場{court_number}",
+                exc_info=True,
+            )
+            return False
 
     def to_value(self, court_name: str) -> int:
         if self.properties is None:

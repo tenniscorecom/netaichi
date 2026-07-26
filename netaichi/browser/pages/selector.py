@@ -36,6 +36,11 @@ class Selector:
     BTN_DELETE = 'input[value="取消"]'
     BTN_RESELECT_DATE = 'input[value="日時を選びなおす"]'
     BTN_ANOTHER_DATE = 'input[value="別の日時を申込む"]'
+    BTN_CART_ADD = 'input[value="予約カートに追加"]'
+    BTN_CART_CONFIRM = 'input[value="予約カートの内容を確認"]'
+    BTN_RESERVATION_PROCEED = 'input[value="予約確定の手続きへ"]'
+    BTN_RESERVATION_CHECK = 'input[value="予約内容を確認する"]'
+    BTN_RESERVATION_CONFIRM = 'input[value="予約を確定する"]'
     # 抽選内容の確認画面から、確定せず設定画面へ戻るボタン
     BTN_TO_SETTING = 'input[value="抽選申込内容設定画面へ"]'
     BTN_REVERSE = 'input[value="施設を選びなおす"]'
