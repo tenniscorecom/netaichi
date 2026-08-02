@@ -4,6 +4,8 @@
 # event_hours: 1イベントの長さ（4時間の予約は2時間×2枠に分割される）
 # deadline_days_before: 申込期限 = レッスン日の何日前か（同時刻）
 # deadline_overrides: コート名(部分一致キー)ごとに締切日数を上書きする
+# deadline_closed_weekday: 施設の休館日(0=月 … 6=日)。締切日が休館日に当たると
+#                          その日に窓口へ取消に行けないため、締切を1日前倒しする
 # submit: false の間は確認モード（フォーム入力まで行い、確定ボタンは押さない）
 # courts: 予約データのコート名(部分一致キー) → テニスベア上のコート名(照合用)
 template_title: 【初回割】シングルス実戦【最大4名】
@@ -11,6 +13,8 @@ event_hours: 2
 deadline_days_before: 2
 deadline_overrides:
   上納池: 9   # 日進市の施設は抽選が早く締まるため募集も早めに締め切る
+deadline_closed_weekday:
+  上納池: 0   # 月曜休館。締切が月曜になる回は日曜に締め切って日曜に取消へ行く
 submit: false
 courts:
   大高緑地: 大高緑地

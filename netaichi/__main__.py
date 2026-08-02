@@ -74,6 +74,16 @@ def main():
         "--headless", action="store_true", help="ブラウザ画面を表示せず実行（定期実行用）"
     )
 
+    p_notice = sub.add_parser(
+        "eaichi-notice", help="窓口取消が必要な枠（上納池等）を通知"
+    )
+    p_notice.add_argument(
+        "--dry-run", action="store_true", help="検出のみ（通知しない）"
+    )
+    p_notice.add_argument(
+        "--headless", action="store_true", help="ブラウザ画面を表示せず実行（定期実行用）"
+    )
+
     p_prune = sub.add_parser(
         "prune", help="練習が埋まった枠のレッスン募集を削除"
     )
@@ -85,7 +95,9 @@ def main():
     )
 
     p_daily = sub.add_parser(
-        "daily", help="毎日の処理: prune（練習埋まりでレッスン削除）→ cancel（0人でコート取消）",
+        "daily",
+        help="毎日の処理: prune（練習埋まりでレッスン削除）→ cancel（0人でコート取消）"
+        "→ eaichi-notice（窓口取消の案内）",
     )
     p_daily.add_argument(
         "--headless", action="store_true", help="ブラウザ画面を表示せず実行（定期実行用）"
@@ -176,6 +188,16 @@ def main():
             print(f"通知のみ(2日後): {len(warned)}件")
             for ev in warned:
                 print(f"  {ev['date']:%m/%d} {ev['start']}時 {ev['court']}")
+        case "eaichi-notice":
+            from netaichi.services.eaichi_notice import run
+
+            targets = run(execute=not args.dry_run, headless=args.headless)
+            print(f"窓口取消が必要: {len(targets)}件")
+            for ev in targets:
+                print(
+                    f"  {ev['date']:%m/%d} {ev['start']}時 {ev['court']}"
+                    f"（取消期限 {ev['limit']:%m/%d}）"
+                )
         case "prune":
             from netaichi.services.prune import run
 
@@ -187,12 +209,15 @@ def main():
         case "daily":
             # 順序が重要: 先にprune（練習ありのレッスンを消す）→後にcancel
             # （逆だと練習で使うコートをcancelが取り消してしまう恐れがある）
-            from netaichi.services import cancel, prune
+            # eあいちの窓口案内は、上の2つで消えた分を通知しないよう最後に回す
+            from netaichi.services import cancel, eaichi_notice, prune
 
             pruned = prune.run(headless=args.headless)
             print(f"prune 削除: {len(pruned)}件")
             cancelled, _ = cancel.run(headless=args.headless)
             print(f"cancel 取消・削除: {len(cancelled)}件")
+            notices = eaichi_notice.run(headless=args.headless)
+            print(f"窓口取消の案内: {len(notices)}件")
 
 
 if __name__ == "__main__":

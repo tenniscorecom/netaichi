@@ -11,6 +11,7 @@ import yaml
 
 from netaichi.browser.tennisbear import TennisBear
 from netaichi.config import IS_HEADLESS, RULES_DIR
+from netaichi.helper import shift_off_closed_day
 from netaichi.services.reserve import collect_eaichi_reservations, collect_reservations
 
 
@@ -43,6 +44,11 @@ def deadline_days_for(court_key: str, conf: dict) -> int:
     return overrides.get(court_key, conf.get("deadline_days_before", 2))
 
 
+def closed_weekday_for(court_key: str, conf: dict) -> int | None:
+    """コートごとの休館日を返す（設定が無ければ None）"""
+    return conf.get("deadline_closed_weekday", {}).get(court_key)
+
+
 def reservations_to_events(df: pd.DataFrame, conf: dict) -> list[dict]:
     """予約データをテニスベアのイベント枠に変換する（純粋関数）"""
     if df.empty:
@@ -61,6 +67,7 @@ def reservations_to_events(df: pd.DataFrame, conf: dict) -> list[dict]:
                     "start": start,
                     "end": end,
                     "deadline_days_before": deadline_days_for(key, conf),
+                    "deadline_closed_weekday": closed_weekday_for(key, conf),
                 }
             )
     return events
@@ -129,7 +136,10 @@ def run(submit: bool | None = None) -> list[dict]:
             for ev in new:
                 start_dt = ev["date"].replace(hour=ev["start"], minute=0)
                 end_dt = ev["date"].replace(hour=ev["end"], minute=0)
-                deadline = start_dt - timedelta(days=ev["deadline_days_before"])
+                deadline = shift_off_closed_day(
+                    start_dt - timedelta(days=ev["deadline_days_before"]),
+                    ev.get("deadline_closed_weekday"),
+                )
                 if not tb.create_event_from_template(
                     template_title=conf["template_title"],
                     court_name=ev["bear_court"],
@@ -144,12 +154,13 @@ def run(submit: bool | None = None) -> list[dict]:
 
 def compute_deadline(
     date: datetime, start: int, participants: int, days_before: int,
-    today: datetime | None = None,
+    today: datetime | None = None, closed_weekday: int | None = None,
 ) -> datetime:
     """既存イベントのあるべき申込期限を求める（純粋関数）
 
     - 参加者がいるイベントは締切を当日にして募集を継続する
     - 参加者0なら開催の days_before 日前
+    - 締切日が施設の休館日なら前日にずらす（その日に窓口へ取消に行けないため）
     - 0人でも締切が過去日になる場合は当日にする（過去は設定できないため）
     """
     if today is None:
@@ -157,7 +168,9 @@ def compute_deadline(
     if participants > 0:
         deadline_date = date
     else:
-        deadline_date = date - timedelta(days=days_before)
+        deadline_date = shift_off_closed_day(
+            date - timedelta(days=days_before), closed_weekday
+        )
         if deadline_date.date() < today.date():
             deadline_date = date
     return deadline_date.replace(hour=start, minute=0, second=0, microsecond=0)
@@ -186,7 +199,8 @@ def sync_deadlines(submit: bool = False) -> list[dict]:
             if key is None:
                 continue
             deadline = compute_deadline(
-                ev["date"], ev["start"], ev["participants"], overrides[key], today
+                ev["date"], ev["start"], ev["participants"], overrides[key], today,
+                closed_weekday_for(key, conf),
             )
             targets.append({**ev, "deadline": deadline})
 

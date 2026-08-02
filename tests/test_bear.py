@@ -4,6 +4,7 @@ from datetime import datetime
 import pandas as pd
 
 from netaichi.services.bear import (
+    closed_weekday_for,
     compute_deadline,
     deadline_days_for,
     match_court,
@@ -16,6 +17,7 @@ CONF = {
     "event_hours": 2,
     "deadline_days_before": 2,
     "deadline_overrides": {"上納池": 9},
+    "deadline_closed_weekday": {"上納池": 0},
     "courts": {
         "大高緑地": "大高緑地",
         "モリコロ": "モリコロパーク",
@@ -149,6 +151,14 @@ class TestDeadlineDaysFor:
         assert deadline_days_for("大高緑地", CONF) == 2
 
 
+class TestClosedWeekdayFor:
+    def test_configured_court(self):
+        assert closed_weekday_for("上納池", CONF) == 0
+
+    def test_other_court_is_none(self):
+        assert closed_weekday_for("大高緑地", CONF) is None
+
+
 class TestComputeDeadline:
     TODAY = datetime(2026, 7, 6)
 
@@ -166,3 +176,13 @@ class TestComputeDeadline:
         # 0人でも9日前が過去日なら当日にする
         d = compute_deadline(datetime(2026, 7, 10), 19, 0, 9, self.TODAY)
         assert d == datetime(2026, 7, 10, 19, 0)
+
+    def test_deadline_on_closed_day_moves_back(self):
+        # 9日前が 08-03(月)＝休館 → 前日の 08-02(日) に締め切る
+        d = compute_deadline(datetime(2026, 8, 12), 19, 0, 9, self.TODAY, 0)
+        assert d == datetime(2026, 8, 2, 19, 0)
+
+    def test_deadline_off_closed_day_unchanged(self):
+        # 9日前が 08-02(日) なら前倒ししない
+        d = compute_deadline(datetime(2026, 8, 11), 19, 0, 9, self.TODAY, 0)
+        assert d == datetime(2026, 8, 2, 19, 0)

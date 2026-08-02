@@ -1,5 +1,20 @@
+from datetime import datetime, timedelta
+
 from sqlmodel import SQLModel
 import pandas as pd
+
+
+def shift_off_closed_day(date: datetime, closed_weekday: int | None) -> datetime:
+    """休館日に当たる日付を前日にずらす（純粋関数）
+
+    窓口でしか取り消せない施設は、休館日に期限が来ると取消に行けないため。
+    closed_weekday は 0=月 … 6=日。None なら何もしない。
+    """
+    if closed_weekday is not None and date.weekday() == closed_weekday:
+        return date - timedelta(days=1)
+    return date
+
+
 def sqlmodel_to_df(objs: list[SQLModel]) -> pd.DataFrame:
     """Convert a SQLModel objects into a pandas DataFrame."""
     records = [i.model_dump() for i in objs]
