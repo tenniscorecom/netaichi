@@ -278,6 +278,36 @@ class TennisBear(ChromeBrowser):
         self.logger.info(f"イベントを作成しました: {court_name} {start:%m/%d %H:%M}-{end:%H:%M}")
         return True
 
+    def get_event_time_range(self, event_id: str) -> tuple[int, int] | None:
+        """イベントの開催時間帯（開始時, 終了時）を編集画面から読む。保存はしない。
+
+        主催イベント一覧には開始時刻しか出ないため、練習会のように
+        4時間1本で募集している枠の長さはここで補う必要がある。
+        時間フィールドの並びは update_deadline と同じ
+        [開始, 終了, 申込期限, キャンセル期限]。
+        """
+        self.go_page(f"{self.BASE_URL}/event/{event_id}/edit")
+        self._wait_render(5)
+
+        # SPAのため、値が入るまで少し待つ
+        values: list[str] = []
+        for _ in range(10):
+            fields = self.__visible('input[placeholder="時間"]')
+            if len(fields) >= 2:
+                values = [f.get_attribute("value") or "" for f in fields[:2]]
+                if all(values):
+                    break
+            time.sleep(0.5)
+
+        if len(values) < 2 or not all(values):
+            self.logger.warning(f"開催時間を読み取れませんでした: {event_id}")
+            return None
+        try:
+            return int(values[0].split(":")[0]), int(values[1].split(":")[0])
+        except ValueError:
+            self.logger.warning(f"開催時間の書式が想定外です: {event_id} {values}")
+            return None
+
     def update_deadline(self, event_id: str, deadline: datetime, submit: bool = False) -> bool:
         """作成済みイベントの申込期限・キャンセル期限を書き換える
 

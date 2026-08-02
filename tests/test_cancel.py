@@ -10,6 +10,7 @@ from netaichi.services.cancel import (
     find_reservation,
     find_solo_practices,
     format_message,
+    merge_event_ranges,
     run,
 )
 
@@ -120,6 +121,35 @@ class TestFindReservation:
 
         assert first == ReservationSlot(TARGET, 13, 15, COURT_NAME, "1", COURT_NAME)
         assert second == ReservationSlot(TARGET, 15, 17, COURT_NAME, "1", COURT_NAME)
+
+
+class TestMergeEventRanges:
+    def test_single_lesson_uses_event_hours(self):
+        events = [_ev(6, 13, 0, lesson=True, practice=False)]
+        assert merge_event_ranges(events, 2, 17) == [(13, 15)]
+
+    def test_four_hour_practice_keeps_its_own_length(self):
+        """残す練習が4時間1本なら、4時間まるごと取り直す"""
+        practice = {**_ev(6, 13, 2, lesson=False, practice=True), "end": 17}
+        assert merge_event_ranges([practice], 2, 17) == [(13, 17)]
+
+    def test_contiguous_lessons_are_merged(self):
+        events = [
+            _ev(6, 13, 0, lesson=True, practice=False),
+            _ev(6, 15, 0, lesson=True, practice=False),
+        ]
+        assert merge_event_ranges(events, 2, 17) == [(13, 17)]
+
+    def test_end_is_clipped_to_reservation(self):
+        events = [_ev(6, 15, 0, lesson=True, practice=False)]
+        assert merge_event_ranges(events, 4, 17) == [(15, 17)]
+
+    def test_gap_produces_separate_ranges(self):
+        events = [
+            _ev(6, 9, 0, lesson=True, practice=False),
+            _ev(6, 15, 0, lesson=True, practice=False),
+        ]
+        assert merge_event_ranges(events, 2, 17) == [(9, 11), (15, 17)]
 
 
 class TestFormatMessage:

@@ -1,5 +1,7 @@
 # 練習が埋まった枠のレッスン募集削除（ルールA）
 #
 # min_participants: シングルス練習がこの人数以上（自分を含む）集まったら、
-#                   同じ日時のレッスン募集を削除する
+#                   その練習の時間帯に重なるレッスン募集を削除する
+# default_event_hours: 練習の終了時刻を編集画面から読めなかったときに使う長さ
 min_participants: 2
+default_event_hours: 2

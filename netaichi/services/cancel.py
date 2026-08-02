@@ -14,6 +14,7 @@ from netaichi.browser import NetAichi
 from netaichi.browser.tennisbear import TennisBear
 from netaichi.config import IS_HEADLESS, OGURI_ACCOUNT_ID, RULES_DIR
 from netaichi.notify import notify
+from netaichi.services.event_times import fill_event_ends
 
 WEEKDAY = ["月", "火", "水", "木", "金", "土", "日"]
 
@@ -112,11 +113,15 @@ def merge_event_ranges(
     event_hours: int,
     reservation_end: int,
 ) -> list[tuple[int, int]]:
-    """連続するテニスベア募集を取り直す時間帯にまとめる"""
+    """連続するテニスベア募集を取り直す時間帯にまとめる
+
+    練習会は4時間1本で募集することがあるため、end が補完済みならそれを使う。
+    end が無いイベントはレッスン1枠分（event_hours）とみなす。
+    """
     ranges: list[tuple[int, int]] = []
     for event in sorted(events, key=lambda item: item["start"]):
         start = event["start"]
-        end = min(start + event_hours, reservation_end)
+        end = min(event.get("end") or start + event_hours, reservation_end)
         if ranges and start <= ranges[-1][1]:
             previous_start, previous_end = ranges[-1]
             ranges[-1] = (previous_start, max(previous_end, end))
@@ -253,6 +258,13 @@ def run(
                     retained_events = [
                         ev for ev in related_events if ev["id"] not in target_ids
                     ]
+                    # 残す練習会は4時間1本のことがあり、取り直す長さを誤ると
+                    # 後半がコート無しになるため実際の終了時刻を取りに行く
+                    fill_event_ends(
+                        tb,
+                        [ev for ev in retained_events if ev["is_practice"]],
+                        event_hours,
+                    )
                     retained_ranges = merge_event_ranges(
                         retained_events,
                         event_hours,
