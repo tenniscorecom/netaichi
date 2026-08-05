@@ -3,6 +3,7 @@
 申込ルールは rules/lottery_rules.yaml で宣言し、
 build_lottery_data()（純粋関数）で申込データに変換する。
 """
+from collections import Counter
 from datetime import datetime
 
 import yaml
@@ -27,6 +28,8 @@ GROUP_IDS = {
     "oguri": OGURI_ACCOUNT_ID,
     "komada": KOMADA_ACCOUNT_ID,
 }
+
+DEFAULT_MAX_PER_COURT = 30
 
 
 def load_rules() -> dict:
@@ -56,19 +59,34 @@ def rule_applies(rule: dict, date: datetime) -> bool:
 
 
 def build_lottery_data(
-    rules: list[dict], dates: list[datetime], account_group: str
+    rules: list[dict],
+    dates: list[datetime],
+    account_group: str,
+    max_per_court: int = DEFAULT_MAX_PER_COURT,
+    applied: list[dict] | None = None,
 ) -> list[T_LotteryData]:
-    """申込ルールと対象日付から抽選申込データを生成する（純粋関数）"""
+    """優先順の申込ルールから施設別上限内の新規申込データを生成する。"""
+    applied = applied or []
+    applied_keys = {
+        (str(item["value"]), item["date"].strftime("%Y-%m-%d"), int(item["start"]))
+        for item in applied
+    }
+    court_counts = Counter(str(item["value"]) for item in applied)
     data = []
-    for date in dates:
-        for rule in rules:
+    # YAMLの記述順を優先度として、上限枠を高優先ルールから割り当てる。
+    for rule in rules:
+        for date in dates:
             if not rule_applies(rule, date):
                 continue
             for value in rule["courts"]:
+                value = str(value)
                 for start, end in rule["times"]:
+                    key = (value, date.strftime("%Y-%m-%d"), int(start))
+                    if key in applied_keys or court_counts[value] >= max_per_court:
+                        continue
                     data.append(
                         T_LotteryData(
-                            value=str(value),
+                            value=value,
                             date=date,
                             start=start,
                             end=end,
@@ -76,7 +94,8 @@ def build_lottery_data(
                             account_group=account_group,
                         )
                     )
-    return data
+                    court_counts[value] += 1
+    return sorted(data, key=lambda item: (item.value, item.date, item.start))
 
 
 def get_group_accounts(group_id: str) -> list[M_Account]:
@@ -88,19 +107,30 @@ def get_group_accounts(group_id: str) -> list[M_Account]:
         ).all()
 
 
-def add_lottery(rules: list[dict], group_id: str, dry_run: bool = False):
+def add_lottery(
+    rules: list[dict],
+    group_id: str,
+    dry_run: bool = False,
+    max_per_court: int = DEFAULT_MAX_PER_COURT,
+) -> None:
     """マスターアカウントでルール分の抽選を申し込む（申込済みはスキップ）"""
-    data = build_lottery_data(rules, lottery_month_dates(), group_id)
-    if not data:
-        return
-    df = sqlmodel_to_df(data)
     with NetAichi(IS_HEADLESS, dry_run=dry_run) as na:
         na.login(id=group_id)
-        # 抽選申込一覧を照会し、既に申込済みの枠は除外する（重複申込防止）
         applied = na.get.lottery()
-        before = len(df)
+        data = build_lottery_data(
+            rules,
+            lottery_month_dates(),
+            group_id,
+            max_per_court=max_per_court,
+            applied=applied,
+        )
+        if not data:
+            na.logger.info("新規に申し込む枠はありません")
+            return
+        df = sqlmodel_to_df(data)
+        # build_lottery_dataでも除外するが、画面データの表記揺れに対する防御として再確認する。
         df = filter_applied(df, applied)
-        na.logger.info(f"申込済みのため除外: {before - len(df)}件 / 申込対象: {len(df)}件")
+        na.logger.info(f"申込対象: {len(df)}件")
         if df.empty:
             na.logger.info("新規に申し込む枠はありません")
             return
@@ -117,7 +147,12 @@ def run_group(name: str, dry_run: bool = False):
 
     rules = conf.get("rules") or []
     if rules:
-        add_lottery(rules, group_id, dry_run)
+        add_lottery(
+            rules,
+            group_id,
+            max_per_court=conf.get("max_per_court", DEFAULT_MAX_PER_COURT),
+            dry_run=dry_run,
+        )
 
     with NetAichi(IS_HEADLESS, dry_run=dry_run) as na:
         if conf.get("update_court_properties"):

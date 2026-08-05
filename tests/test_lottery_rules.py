@@ -83,6 +83,70 @@ class TestBuildLotteryData:
         )
         assert len(data) == 5  # 土曜4 + 月曜1
 
+    def test_max_per_court_is_applied(self):
+        dates = [datetime(2026, 10, day) for day in range(1, 32)]
+        data = build_lottery_data(
+            [WEEKEND_RULE], dates, account_group="test", max_per_court=3
+        )
+        assert len([item for item in data if item.value == "130"]) == 3
+        assert len([item for item in data if item.value == "180"]) == 3
+
+    def test_earlier_rule_has_priority_over_later_rule(self):
+        high_priority_rule = {**WEEKEND_RULE, "courts": ["400"]}
+        dates = [datetime(2026, 10, 3), datetime(2026, 10, 5)]
+        data = build_lottery_data(
+            [high_priority_rule, WEEKNIGHT_RULE],
+            dates,
+            account_group="test",
+            max_per_court=2,
+        )
+        assert [(item.date, item.start) for item in data] == [
+            (datetime(2026, 10, 3), 9),
+            (datetime(2026, 10, 3), 13),
+        ]
+
+    def test_court_limits_are_counted_independently(self):
+        dates = [datetime(2026, 10, 3), datetime(2026, 10, 4)]
+        data = build_lottery_data(
+            [WEEKEND_RULE], dates, account_group="test", max_per_court=3
+        )
+        counts = {
+            value: sum(item.value == value for item in data)
+            for value in ("130", "180")
+        }
+        assert counts == {"130": 3, "180": 3}
+
+    def test_result_is_sorted_by_court_date_and_start(self):
+        dates = [datetime(2026, 10, 5), datetime(2026, 10, 3)]
+        data = build_lottery_data(
+            [WEEKNIGHT_RULE, {**WEEKEND_RULE, "courts": ["400"]}],
+            dates,
+            account_group="test",
+        )
+        assert [(item.value, item.date, item.start) for item in data] == [
+            ("400", datetime(2026, 10, 3), 9),
+            ("400", datetime(2026, 10, 3), 13),
+            ("400", datetime(2026, 10, 5), 19),
+        ]
+
+    def test_applied_slots_count_toward_limit_without_blocking_lower_priority(self):
+        dates = [datetime(2026, 10, 3), datetime(2026, 10, 5)]
+        high_priority_rule = {**WEEKEND_RULE, "courts": ["400"]}
+        applied = [
+            {"value": "400", "date": datetime(2026, 10, 3), "start": "9"}
+        ]
+        data = build_lottery_data(
+            [high_priority_rule, WEEKNIGHT_RULE],
+            dates,
+            account_group="test",
+            max_per_court=3,
+            applied=applied,
+        )
+        assert [(item.date, item.start) for item in data] == [
+            (datetime(2026, 10, 3), 13),
+            (datetime(2026, 10, 5), 19),
+        ]
+
 
 class TestLotteryMonthDates:
     def test_returns_all_days_of_target_month(self):
