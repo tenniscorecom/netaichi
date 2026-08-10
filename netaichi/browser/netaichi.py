@@ -3,6 +3,7 @@ from .pages.selector import Selector
 from netaichi.db import NetaichiDatabase, M_CourtProperty, T_LotteryData
 from sqlmodel import delete, select
 from selenium.webdriver.common.by import By
+from selenium.common.exceptions import StaleElementReferenceException
 import pandas as pd
 from datetime import datetime as dd
 import re
@@ -20,6 +21,8 @@ class NetAichi(Jsp):
     TENNIS_FACILITY_PREFIX = "庭球場"
     TENNIS_PURPOSE_VALUE = "1000-10000010"
     RESERVATION_PLAYERS = 4
+    STALE_CLICK_RETRY_COUNT = 3
+    STALE_CLICK_RETRY_WAIT_SECONDS = 0.5
     USE_COURTS = [
         130,
         180,
@@ -377,11 +380,23 @@ class NetAichi(Jsp):
         キャンセル限界日を過ぎていると取消ボタンが無く、Falseを返す。
         """
         self.go.mypage()
-        link = self.get_element_by_contains_text("//a", "予約状況の一覧")
-        if link is None:
-            self.logger.error("「予約状況の一覧」リンクが見つかりません")
-            return False
-        link.click()
+        for attempt in range(self.STALE_CLICK_RETRY_COUNT):
+            link = self.get_element_by_contains_text("//a", "予約状況の一覧")
+            if link is None:
+                self.logger.error("「予約状況の一覧」リンクが見つかりません")
+                return False
+            try:
+                link.click()
+                break
+            except StaleElementReferenceException:
+                self.logger.warning(
+                    "「予約状況の一覧」リンクが再描画されました（%d/%d）",
+                    attempt + 1,
+                    self.STALE_CLICK_RETRY_COUNT,
+                )
+                if attempt + 1 == self.STALE_CLICK_RETRY_COUNT:
+                    raise
+                time.sleep(self.STALE_CLICK_RETRY_WAIT_SECONDS)
         time.sleep(2)
 
         normalized_number = (

@@ -165,6 +165,79 @@ class TestFormatMessage:
 
 
 class TestRun:
+    def test_continues_after_one_reservation_group_raises(self):
+        first = _ev(6, 13, 0, lesson=True, practice=False, court=BEAR_COURT)
+        second = _ev(6, 15, 0, lesson=True, practice=False, court=BEAR_COURT)
+        reservations = pd.concat([_reservations(13, 15), _reservations(15, 17)])
+
+        with (
+            patch("netaichi.services.cancel.load_rules", return_value=CONF),
+            patch("netaichi.services.cancel.TennisBear") as tennis_bear_class,
+            patch("netaichi.services.cancel.NetAichi") as netaichi_class,
+            patch("netaichi.services.cancel.notify") as notify,
+        ):
+            tennis_bear = tennis_bear_class.return_value.__enter__.return_value
+            tennis_bear.list_organized_events.return_value = [first, second]
+            tennis_bear.delete_event.return_value = True
+            netaichi = netaichi_class.return_value.__enter__.return_value
+            netaichi.get.reservation.return_value = reservations
+            netaichi.cancel_reservation.side_effect = [RuntimeError("stale"), True]
+
+            cancelled, warned = run(target_date=TARGET)
+
+        assert cancelled == [second]
+        assert warned == []
+        assert netaichi.cancel_reservation.call_count == 2
+        tennis_bear.delete_event.assert_called_once_with(second["id"])
+        assert any(
+            "手動で予約状況を確認" in call_args.args[0]
+            for call_args in notify.call_args_list
+        )
+
+    def test_notifies_urgent_failure_when_error_occurs_after_cancellation(self):
+        empty_event = _ev(
+            6,
+            13,
+            0,
+            lesson=True,
+            practice=False,
+            court=BEAR_COURT,
+        )
+        occupied_event = _ev(
+            6,
+            15,
+            2,
+            lesson=True,
+            practice=False,
+            court=BEAR_COURT,
+        )
+
+        with (
+            patch("netaichi.services.cancel.load_rules", return_value=CONF),
+            patch("netaichi.services.cancel.TennisBear") as tennis_bear_class,
+            patch("netaichi.services.cancel.NetAichi") as netaichi_class,
+            patch("netaichi.services.cancel.notify") as notify,
+        ):
+            tennis_bear = tennis_bear_class.return_value.__enter__.return_value
+            tennis_bear.list_organized_events.return_value = [
+                empty_event,
+                occupied_event,
+            ]
+            netaichi = netaichi_class.return_value.__enter__.return_value
+            netaichi.get.reservation.return_value = _reservations()
+            netaichi.cancel_reservation.return_value = True
+            netaichi.reserve_available_slot.side_effect = RuntimeError("画面エラー")
+
+            cancelled, warned = run(target_date=TARGET)
+
+        assert cancelled == []
+        assert warned == []
+        tennis_bear.delete_event.assert_not_called()
+        messages = [call_args.args[0] for call_args in notify.call_args_list]
+        assert any("取り消したまま取り直せていない可能性" in message for message in messages)
+        assert any("至急手動で確保" in message for message in messages)
+        assert not any("手動で予約状況を確認してください" in message for message in messages)
+
     def test_cancels_four_hour_reservation_once_and_deletes_both_events(self):
         events = [
             _ev(6, 13, 0, lesson=True, practice=False, court=BEAR_COURT),

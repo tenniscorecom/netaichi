@@ -7,6 +7,7 @@ from datetime import datetime
 from unittest.mock import Mock, patch
 
 import pytest
+from selenium.common.exceptions import StaleElementReferenceException
 
 from netaichi.browser.netaichi import NetAichi
 
@@ -53,6 +54,19 @@ def _no_sleep():
 
 
 class TestCancelReservation:
+    def test_retries_stale_reservation_list_link(self):
+        browser = _browser([FOUR_HOUR_ROW])
+        stale_link = Mock()
+        stale_link.click.side_effect = StaleElementReferenceException()
+        fresh_link = Mock()
+        browser.get_element_by_contains_text.side_effect = [stale_link, fresh_link]
+
+        with patch("netaichi.browser.netaichi.time.sleep") as sleep:
+            assert browser.cancel_reservation(TARGET, 13, 17, COURT_NAME, "1") is True
+        assert browser.get_element_by_contains_text.call_count == 2
+        fresh_link.click.assert_called_once()
+        sleep.assert_any_call(0.5)
+
     def test_cancels_four_hour_row_by_its_start_hour(self):
         browser = _browser([FOUR_HOUR_ROW])
 

@@ -3,6 +3,69 @@
 使い方: python -m netaichi <command>
 """
 import argparse
+import re
+
+
+SENSITIVE_VALUE_PATTERN = re.compile(
+    r"(?i)(password|passwd|token|secret|api[_-]?key|authorization)(\s*[=:]\s*)([^\s,;]+)"
+)
+URL_QUERY_PATTERN = re.compile(r"(https?://[^\s?]+)\?[^\s]+")
+
+
+def _safe_exception_message(error: Exception) -> str:
+    message = URL_QUERY_PATTERN.sub(r"\1?[REDACTED]", str(error))
+    return SENSITIVE_VALUE_PATTERN.sub(r"\1\2[REDACTED]", message)[:500]
+
+
+def _notify_safely(message: str) -> None:
+    """通知そのものの失敗でdailyを止めない"""
+    from netaichi.notify import notify
+
+    try:
+        notify(message)
+    except Exception as error:
+        print(f"Discord通知に失敗しました: {type(error).__name__}")
+
+
+def _run_daily(headless: bool) -> None:
+    """毎日の処理。1フェーズが落ちても残りを進め、失敗は必ず通知して非ゼロ終了する"""
+    from netaichi.services import cancel, eaichi_notice, prune
+
+    failed_phases: list[str] = []
+
+    def run_phase(name: str, func, label: str) -> bool:
+        try:
+            result = func(headless=headless)
+            items = result[0] if isinstance(result, tuple) else result
+            print(f"{label}: {len(items)}件")
+            return True
+        except Exception as error:
+            failed_phases.append(name)
+            _notify_safely(
+                f"🚨 daily の {name} フェーズでエラーが発生しました。\n"
+                f"{type(error).__name__}: {_safe_exception_message(error)}"
+            )
+            return False
+
+    # 順序が重要: 先にprune（練習ありのレッスンを消す）→後にcancel
+    is_pruned = run_phase("prune", prune.run, "prune 削除")
+
+    # pruneが落ちると消えるはずのレッスン募集が残る。それを集客0とみなしたcancelが
+    # 練習で使うコートまで取り消しかねないので、安全側に倒してスキップする
+    if is_pruned:
+        run_phase("cancel", cancel.run, "cancel 取消・削除")
+    else:
+        failed_phases.append("cancel")
+        _notify_safely(
+            "🚨 prune が失敗したため cancel を安全側でスキップしました。"
+            "コート予約を手動で確認してください。"
+        )
+
+    # eあいちの窓口案内は、上の2つで消えた分を通知しないよう最後に回す
+    run_phase("eaichi_notice", eaichi_notice.run, "窓口取消の案内")
+
+    if failed_phases:
+        raise RuntimeError(f"daily の失敗フェーズ: {', '.join(failed_phases)}")
 
 
 def main():
@@ -207,17 +270,7 @@ def main():
             for ev in result:
                 print(f"  {ev['date']:%m/%d} {ev['start']}時 {ev['court']}")
         case "daily":
-            # 順序が重要: 先にprune（練習ありのレッスンを消す）→後にcancel
-            # （逆だと練習で使うコートをcancelが取り消してしまう恐れがある）
-            # eあいちの窓口案内は、上の2つで消えた分を通知しないよう最後に回す
-            from netaichi.services import cancel, eaichi_notice, prune
-
-            pruned = prune.run(headless=args.headless)
-            print(f"prune 削除: {len(pruned)}件")
-            cancelled, _ = cancel.run(headless=args.headless)
-            print(f"cancel 取消・削除: {len(cancelled)}件")
-            notices = eaichi_notice.run(headless=args.headless)
-            print(f"窓口取消の案内: {len(notices)}件")
+            _run_daily(args.headless)
 
 
 if __name__ == "__main__":

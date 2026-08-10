@@ -195,6 +195,33 @@ def format_rebook_failure_message(failed: list[ReservationSlot]) -> str:
     return "\n".join(lines)
 
 
+def format_processing_failure_message(failed: list[ReservationSlot]) -> str:
+    lines = ["🚨 コート取消の自動処理に失敗しました。手動で予約状況を確認してください"]
+    for reservation in failed:
+        weekday = WEEKDAY[reservation.date.weekday()]
+        lines.append(
+            f"・{reservation.date:%m/%d}({weekday}) "
+            f"{reservation.start}-{reservation.end}時 "
+            f"{reservation.court_name} 庭球場{reservation.court_number}"
+        )
+    return "\n".join(lines)
+
+
+def format_post_cancel_failure_message(failed: list[ReservationSlot]) -> str:
+    lines = [
+        "🚨 コートを取り消したまま取り直せていない可能性があります。"
+        "至急手動で確保してください"
+    ]
+    for reservation in failed:
+        weekday = WEEKDAY[reservation.date.weekday()]
+        lines.append(
+            f"・{reservation.date:%m/%d}({weekday}) "
+            f"{reservation.start}-{reservation.end}時 "
+            f"{reservation.court_name} 庭球場{reservation.court_number}"
+        )
+    return "\n".join(lines)
+
+
 def run(
     target_date: datetime | None = None,
     execute: bool = True,
@@ -228,6 +255,8 @@ def run(
         partial_rebooked: list[tuple[ReservationSlot, int, int]] = []
         rolled_back: list[ReservationSlot] = []
         rebook_failed: list[ReservationSlot] = []
+        processing_failed: list[ReservationSlot] = []
+        post_cancel_failed: list[ReservationSlot] = []
         if targets:
             with NetAichi(headless) as na:
                 na.login(id=OGURI_ACCOUNT_ID)
@@ -250,74 +279,90 @@ def run(
                 target_ids = {ev["id"] for ev in targets}
                 event_hours = conf.get("event_hours", 2)
                 for reservation, reservation_targets in reservation_groups.items():
-                    related_events = [
-                        ev
-                        for ev in events
-                        if event_matches_reservation(ev, reservation, conf["court_map"])
-                    ]
-                    retained_events = [
-                        ev for ev in related_events if ev["id"] not in target_ids
-                    ]
-                    # 残す練習会は4時間1本のことがあり、取り直す長さを誤ると
-                    # 後半がコート無しになるため実際の終了時刻を取りに行く
-                    fill_event_ends(
-                        tb,
-                        [ev for ev in retained_events if ev["is_practice"]],
-                        event_hours,
-                    )
-                    retained_ranges = merge_event_ranges(
-                        retained_events,
-                        event_hours,
-                        reservation.end,
-                    )
-                    if len(retained_ranges) > 1:
-                        na.logger.warning(
-                            f"取り直す時間帯が分断されているため自動処理をスキップ: "
-                            f"{reservation.date:%Y-%m-%d} "
-                            f"{reservation.start}-{reservation.end}時 "
-                            f"{reservation.court_keyword}"
+                    is_cancelled = False
+                    try:
+                        related_events = [
+                            ev
+                            for ev in events
+                            if event_matches_reservation(ev, reservation, conf["court_map"])
+                        ]
+                        retained_events = [
+                            ev for ev in related_events if ev["id"] not in target_ids
+                        ]
+                        # 残す練習会は4時間1本のことがあり、取り直す長さを誤ると
+                        # 後半がコート無しになるため実際の終了時刻を取りに行く
+                        fill_event_ends(
+                            tb,
+                            [ev for ev in retained_events if ev["is_practice"]],
+                            event_hours,
                         )
-                        continue
-                    if not execute:
-                        cancelled.extend(reservation_targets)
-                        continue
-                    if not na.cancel_reservation(
-                        reservation.date,
-                        reservation.start,
-                        reservation.end,
-                        reservation.court_keyword,
-                        reservation.court_number,
-                    ):
-                        continue
+                        retained_ranges = merge_event_ranges(
+                            retained_events,
+                            event_hours,
+                            reservation.end,
+                        )
+                        if len(retained_ranges) > 1:
+                            na.logger.warning(
+                                f"取り直す時間帯が分断されているため自動処理をスキップ: "
+                                f"{reservation.date:%Y-%m-%d} "
+                                f"{reservation.start}-{reservation.end}時 "
+                                f"{reservation.court_keyword}"
+                            )
+                            continue
+                        if not execute:
+                            cancelled.extend(reservation_targets)
+                            continue
+                        if not na.cancel_reservation(
+                            reservation.date,
+                            reservation.start,
+                            reservation.end,
+                            reservation.court_keyword,
+                            reservation.court_number,
+                        ):
+                            continue
+                        is_cancelled = True
 
-                    if not retained_ranges:
-                        cancelled.extend(reservation_targets)
-                        continue
+                        if not retained_ranges:
+                            cancelled.extend(reservation_targets)
+                            continue
 
-                    kept_start, kept_end = retained_ranges[0]
-                    if na.reserve_available_slot(
-                        reservation.date,
-                        kept_start,
-                        kept_end,
-                        reservation.court_name,
-                        reservation.court_number,
-                    ):
-                        partial_rebooked.append((reservation, kept_start, kept_end))
-                        cancelled.extend(reservation_targets)
-                        continue
+                        kept_start, kept_end = retained_ranges[0]
+                        if na.reserve_available_slot(
+                            reservation.date,
+                            kept_start,
+                            kept_end,
+                            reservation.court_name,
+                            reservation.court_number,
+                        ):
+                            partial_rebooked.append((reservation, kept_start, kept_end))
+                            cancelled.extend(reservation_targets)
+                            continue
 
-                    is_reset = na.reset_reservation_session()
-                    if is_reset and na.reserve_available_slot(
-                        reservation.date,
-                        reservation.start,
-                        reservation.end,
-                        reservation.court_name,
-                        reservation.court_number,
-                    ):
-                        rolled_back.append(reservation)
-                        cancelled.extend(reservation_targets)
-                    else:
-                        rebook_failed.append(reservation)
+                        is_reset = na.reset_reservation_session()
+                        if is_reset and na.reserve_available_slot(
+                            reservation.date,
+                            reservation.start,
+                            reservation.end,
+                            reservation.court_name,
+                            reservation.court_number,
+                        ):
+                            rolled_back.append(reservation)
+                            cancelled.extend(reservation_targets)
+                        else:
+                            rebook_failed.append(reservation)
+                    except Exception:
+                        na.logger.error(
+                            "予約グループの自動処理に失敗: %s %s-%s時 %s",
+                            reservation.date.strftime("%Y-%m-%d"),
+                            reservation.start,
+                            reservation.end,
+                            reservation.court_keyword,
+                            exc_info=True,
+                        )
+                        if is_cancelled:
+                            post_cancel_failed.append(reservation)
+                        else:
+                            processing_failed.append(reservation)
 
         # コート取消に成功した分だけテニスベアの募集も削除する。
         # 削除に失敗した場合（申込みが入った等）は保留にして別途通知する
@@ -342,6 +387,10 @@ def run(
         notify(format_rollback_message(rolled_back))
     if execute and rebook_failed:
         notify(format_rebook_failure_message(rebook_failed))
+    if execute and processing_failed:
+        notify(format_processing_failure_message(processing_failed))
+    if execute and post_cancel_failed:
+        notify(format_post_cancel_failure_message(post_cancel_failed))
     if execute and warn_targets:
         notify(format_warning_message(warn_targets))
     return cancelled, warn_targets
