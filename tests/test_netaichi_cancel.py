@@ -105,3 +105,26 @@ class TestCancelReservation:
         browser = _browser([FOUR_HOUR_ROW], can_cancel=False)
 
         assert browser.cancel_reservation(TARGET, 13, 17, COURT_NAME, "1") is False
+
+
+class TestFacilityMatches:
+    def test_normalizes_full_width_number_and_parentheses(self):
+        browser = NetAichi.__new__(NetAichi)
+
+        assert browser._facility_matches("庭球場１（人工芝）", "庭球場1")
+
+    def test_ignores_whitespace_between_prefix_and_number(self):
+        browser = NetAichi.__new__(NetAichi)
+
+        assert browser._facility_matches("庭球場 1 (人工芝)", "庭球場1")
+
+    def test_does_not_match_single_digit_to_two_digit_court(self):
+        browser = NetAichi.__new__(NetAichi)
+
+        assert not browser._facility_matches("庭球場１１（人工芝）", "庭球場1")
+
+    def test_treats_regex_metacharacters_as_plain_text(self):
+        browser = NetAichi.__new__(NetAichi)
+
+        assert browser._facility_matches("庭球場(東)+1", "庭球場(東)+1")
+        assert not browser._facility_matches("庭球場東東1", "庭球場(東)+1")

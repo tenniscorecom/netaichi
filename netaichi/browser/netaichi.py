@@ -364,6 +364,25 @@ class NetAichi(Jsp):
                 break
         return slots
 
+    def _facility_matches(self, text: str, facility_keyword: str) -> bool:
+        """コート名が facility_keyword と一致するか（番号の直後が数字でないことを確認）
+
+        単純な部分一致だと「庭球場1」が「庭球場11」にも当たってしまう。
+        大高緑地のように14面ある施設で1桁の面を狙うと、別の面を取消・予約しかねない。
+        """
+        normalized_text = re.sub(r"\s+", "", normalize("NFKC", str(text)))
+        normalized_keyword = re.sub(
+            r"\s+", "", normalize("NFKC", str(facility_keyword))
+        )
+        suffix = r"(?!\d)" if normalized_keyword[-1:].isdigit() else ""
+        return (
+            re.search(
+                rf"{re.escape(normalized_keyword)}{suffix}",
+                normalized_text,
+            )
+            is not None
+        )
+
     def cancel_reservation(
         self,
         date: dd,
@@ -411,9 +430,8 @@ class NetAichi(Jsp):
                 if not m:
                     continue
                 y, mo, d, h = map(int, m.groups())
-                facility_matches = (
-                    normalized_number is None
-                    or f"{self.TENNIS_FACILITY_PREFIX}{normalized_number}" in txt
+                facility_matches = normalized_number is None or self._facility_matches(
+                    txt, f"{self.TENNIS_FACILITY_PREFIX}{normalized_number}"
                 )
                 if not (
                     dd(y, mo, d) == date
@@ -583,7 +601,7 @@ class NetAichi(Jsp):
                 slot_end = int(parts[5])
                 if (
                     parts[2] != target_date
-                    or facility_keyword not in facility_name
+                    or not self._facility_matches(facility_name, facility_keyword)
                     or slot_start < target_start
                     or slot_end > target_end
                 ):

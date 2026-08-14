@@ -68,8 +68,17 @@ def find_reservation(
     event: dict,
     court_keyword: str,
     reservations: pd.DataFrame,
+    assigned: set[tuple] | None = None,
 ) -> ReservationSlot | None:
-    """テニスベアの2時間枠を内包するネットあいち予約を返す"""
+    """テニスベアの2時間枠を内包するネットあいち予約を返す
+
+    同じ日時に複数面を予約していることがあるため、既に他のイベントへ割り当てた面は
+    assigned で除外する。除外しないと2件の募集が同じ面を指し、もう1面が
+    取り消されずに残る。
+    4時間の予約に2時間の募集が2件ぶら下がるケースは同じ面を指すのが正しいので、
+    割当済みかどうかは面とイベント開始時刻の組で判断する。
+    """
+    assigned = assigned or set()
     for row in reservations.itertuples():
         reservation_date = pd.Timestamp(row.date).to_pydatetime().replace(
             hour=0,
@@ -84,7 +93,7 @@ def find_reservation(
             and reservation_start <= event["start"] < reservation_end
             and court_keyword in str(row.court)
         ):
-            return ReservationSlot(
+            slot = ReservationSlot(
                 date=reservation_date,
                 start=reservation_start,
                 end=reservation_end,
@@ -92,6 +101,9 @@ def find_reservation(
                 court_number=str(row.court_number),
                 court_keyword=court_keyword,
             )
+            if (slot, event["start"]) in assigned:
+                continue
+            return slot
     return None
 
 
@@ -262,18 +274,20 @@ def run(
                 na.login(id=OGURI_ACCOUNT_ID)
                 reservations = na.get.reservation()
                 reservation_groups: dict[ReservationSlot, list[dict]] = {}
+                assigned: set[tuple] = set()
                 for ev in targets:
                     keyword = map_court(ev["court"], conf["court_map"])
                     if keyword is None:
                         na.logger.warning(f"ネットあいち未対応コートのためスキップ: {ev['court']}")
                         continue
-                    reservation = find_reservation(ev, keyword, reservations)
+                    reservation = find_reservation(ev, keyword, reservations, assigned)
                     if reservation is None:
                         na.logger.warning(
                             f"対応するコート予約が見つからないためスキップ: "
                             f"{ev['date']:%Y-%m-%d} {ev['start']}時 {ev['court']}"
                         )
                         continue
+                    assigned.add((reservation, ev["start"]))
                     reservation_groups.setdefault(reservation, []).append(ev)
 
                 target_ids = {ev["id"] for ev in targets}

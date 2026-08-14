@@ -122,6 +122,45 @@ class TestFindReservation:
         assert first == ReservationSlot(TARGET, 13, 15, COURT_NAME, "1", COURT_NAME)
         assert second == ReservationSlot(TARGET, 15, 17, COURT_NAME, "1", COURT_NAME)
 
+    def test_same_time_events_match_different_courts(self):
+        """同じ日時に2面あるとき、2件の募集はそれぞれ別の面に割り当てる"""
+        reservations = pd.DataFrame(
+            [
+                {
+                    "date": TARGET, "start": "9", "end": "13",
+                    "court": COURT_NAME, "court_number": number,
+                }
+                for number in ("1", "2")
+            ]
+        )
+        assigned: set[tuple] = set()
+
+        first = find_reservation(
+            _ev(6, 9, 0, lesson=True, practice=False), COURT_NAME, reservations, assigned
+        )
+        assigned.add((first, 9))
+        second = find_reservation(
+            _ev(6, 9, 0, lesson=True, practice=False), COURT_NAME, reservations, assigned
+        )
+
+        assert first == ReservationSlot(TARGET, 9, 13, COURT_NAME, "1", COURT_NAME)
+        assert second == ReservationSlot(TARGET, 9, 13, COURT_NAME, "2", COURT_NAME)
+
+    def test_split_events_share_one_reservation_even_when_assigned(self):
+        """4時間予約に2時間募集が2件ぶら下がる場合は、割当済みでも同じ面を返す"""
+        reservations = _reservations()
+        assigned: set[tuple] = set()
+
+        first = find_reservation(
+            _ev(6, 13, 0, lesson=True, practice=False), COURT_NAME, reservations, assigned
+        )
+        assigned.add((first, 13))
+        second = find_reservation(
+            _ev(6, 15, 0, lesson=True, practice=False), COURT_NAME, reservations, assigned
+        )
+
+        assert first == second
+
 
 class TestMergeEventRanges:
     def test_single_lesson_uses_event_hours(self):
