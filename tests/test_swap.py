@@ -2,6 +2,8 @@
 from datetime import datetime
 from unittest.mock import Mock, call
 
+from sqlalchemy.exc import OperationalError
+
 from netaichi.services.swap import (
     court_rank,
     covers,
@@ -188,6 +190,31 @@ class TestFindSwapTargets:
         targets = find_swap_targets(reservations, slots, COURTS)
 
         assert targets[0].to_number == 1
+
+
+class TestTargetAccounts:
+    def test_falls_back_to_master_when_table_is_missing(self, monkeypatch):
+        """DBを持たない環境（GitHub Actions）ではマスターだけを対象にする"""
+        from netaichi.services import swap
+
+        monkeypatch.setattr(
+            swap,
+            "get_group_accounts",
+            Mock(side_effect=OperationalError("select", {}, Exception())),
+        )
+
+        accounts = swap.target_accounts("oguri")
+
+        assert [a.id for a in accounts] == [swap.GROUP_IDS["oguri"]]
+
+    def test_uses_db_accounts_when_available(self, monkeypatch):
+        from netaichi.services import swap
+
+        monkeypatch.setattr(
+            swap, "get_group_accounts", Mock(return_value=["a", "b", "c"])
+        )
+
+        assert swap.target_accounts("oguri") == ["a", "b", "c"]
 
 
 class TestFormatOrphanMessage:

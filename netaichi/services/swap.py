@@ -14,6 +14,7 @@ from unicodedata import normalize
 import pandas as pd
 import yaml
 from dateutil.relativedelta import relativedelta
+from sqlalchemy.exc import OperationalError
 
 from netaichi.browser import NetAichi
 from netaichi.config import IS_HEADLESS, RULES_DIR, default_pw
@@ -148,17 +149,25 @@ def find_swap_targets(
     return targets
 
 
-def target_accounts(group_name: str) -> list[M_Account]:
+def target_accounts(group_name: str, logger=None) -> list[M_Account]:
     """対象アカウントの一覧を返す
 
-    DBはリポジトリに含めていないため、GitHub Actions のような環境では
-    アカウント一覧を引けない。その場合はマスターだけを対象にする。
+    アカウント一覧はDB（*.sqlite）にあるが、これはリポジトリに含めていない。
+    GitHub Actions のような環境ではDBファイルが無く、接続はできてもテーブルが
+    無いため OperationalError になる。その場合はマスターだけを対象にする。
     予約の大半はマスターが持っているので、これでも大半は拾える。
     """
     group_id = GROUP_IDS[group_name]
-    accounts = get_group_accounts(group_id)
+    try:
+        accounts = get_group_accounts(group_id)
+    except OperationalError:
+        accounts = []
     if accounts:
         return accounts
+    if logger is not None:
+        logger.warning(
+            f"アカウント一覧を引けないため、マスター（{group_id}）だけを対象にします"
+        )
     return [M_Account(name="", id=group_id, password=default_pw)]
 
 
@@ -266,11 +275,10 @@ def run(execute: bool = True, headless: bool = IS_HEADLESS) -> list[SwapTarget]:
     today = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
     start_date = today + timedelta(days=conf.get("min_days_ahead", 2))
     end_date = today + relativedelta(months=conf.get("months_ahead", 2))
-    accounts = target_accounts(conf.get("group", "oguri"))
-
     swapped: list[SwapTarget] = []
     orphaned: list[SwapTarget] = []
     with NetAichi(headless) as na:
+        accounts = target_accounts(conf.get("group", "oguri"), na.logger)
         reservations = collect_reservations(
             na, accounts, courts_conf, start_date, end_date
         )
