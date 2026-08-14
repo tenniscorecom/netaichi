@@ -122,6 +122,10 @@ def find_surplus_courts(
     for (court_name, date, start, end), slots in group_reservations(reservations).items():
         if len(slots) <= 1:
             continue  # 1面だけなら cancel（ルールB）の担当
+        if any(normalize_number(slot.court_number) is None for slot in slots):
+            # フットサル等、予約一覧に面番号が出ないコートが混じる枠。
+            # 面番号なしで取消を頼むと「庭球場」を含む別の面を掴んでしまうため触らない
+            continue
         related = [
             event
             for event in events

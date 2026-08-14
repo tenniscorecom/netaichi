@@ -184,6 +184,18 @@ class TestFindSurplusCourts:
 
         assert surplus == []
 
+    def test_slot_without_court_number_is_left_alone(self):
+        """フットサルのように面番号が出ない予約が混じる枠は触らない
+
+        面番号なしで取消を頼むと「庭球場」を含む別の面を掴んでしまう。
+        """
+        events = [_ev(9, 2)]  # 2人 → 1面
+        surplus = find_surplus_courts(
+            events, _reservations(["6", ""]), CONF, SWAP_COURTS
+        )
+
+        assert surplus == []
+
     def test_no_events_means_no_judgement(self):
         """募集が出ていない枠は判断材料がないので触らない"""
         surplus = find_surplus_courts([], _reservations(["3", "5"]), CONF, SWAP_COURTS)
