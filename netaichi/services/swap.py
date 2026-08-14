@@ -16,15 +16,13 @@ import yaml
 from dateutil.relativedelta import relativedelta
 
 from netaichi.browser import NetAichi
-from netaichi.config import IS_HEADLESS, OGURI_ACCOUNT_ID, RULES_DIR
-from netaichi.db import M_Account, NetaichiDatabase, select
+from netaichi.config import IS_HEADLESS, RULES_DIR
 from netaichi.notify import notify
 from netaichi.services.availability import merge_hour_slots
+from netaichi.services.lottery import GROUP_IDS, get_group_accounts
 
 WEEKDAY = ["月", "火", "水", "木", "金", "土", "日"]
 DEFAULT_PREFIX = "庭球場"
-
-db = NetaichiDatabase(False)
 
 
 @dataclass(frozen=True)
@@ -171,7 +169,7 @@ def collect_reservations(
                 continue
             number = normalize_number(row.court_number)
             if number is None:
-                continue
+                continue  # フットサル等、予約一覧に面番号が出ないコートは対象外
             reservations.append(
                 {
                     "account_id": account.id,
@@ -250,15 +248,10 @@ def run(execute: bool = True, headless: bool = IS_HEADLESS) -> list[SwapTarget]:
     """
     conf = load_rules()
     courts_conf = conf["courts"]
-    group = conf.get("group", OGURI_ACCOUNT_ID)
     today = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
     start_date = today + timedelta(days=conf.get("min_days_ahead", 2))
     end_date = today + relativedelta(months=conf.get("months_ahead", 2))
-
-    with db.session() as session:
-        accounts = session.exec(
-            select(M_Account).where(M_Account.account_group == group)
-        ).all()
+    accounts = get_group_accounts(GROUP_IDS[conf.get("group", "oguri")])
 
     swapped: list[SwapTarget] = []
     orphaned: list[SwapTarget] = []
@@ -266,8 +259,12 @@ def run(execute: bool = True, headless: bool = IS_HEADLESS) -> list[SwapTarget]:
         reservations = collect_reservations(
             na, accounts, courts_conf, start_date, end_date
         )
+        na.logger.info(
+            f"対象の予約: {len(reservations)}件"
+            f"（{start_date:%m/%d}〜{end_date:%m/%d} / "
+            f"{'・'.join(courts_conf)}）"
+        )
         if not reservations:
-            na.logger.info("対象の予約がありません")
             return []
 
         slots = collect_slots(na, reservations, courts_conf)
