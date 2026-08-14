@@ -55,8 +55,12 @@ class Selector:
     TIMES = "#komanamem"
     SELECT_AMOUNT = "#selectFieldCnt"
     SELECT_CHECKBOX = 'input[name="selectKomaNo"]'
+    # 抽選申込の設定画面
     SELECT_SPORTS = "#selectPurpose"
     SELECT_PLAYERS = "#applyPepopleNum"
+    # 予約の詳細情報入力画面。抽選側とは別の画面で、こちらはidが振られていない
+    RESERVE_SELECT_PURPOSE = 'select[name="purpose"]'
+    RESERVE_INPUT_PLAYERS = 'input[name="inputApplyNum"]'
 
     drawChekcks = ".tablebg2 .s-243m"
 

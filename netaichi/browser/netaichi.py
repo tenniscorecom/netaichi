@@ -523,11 +523,14 @@ class NetAichi(Jsp):
                 self.logger.error(f"予約手続きへ進めません: {facility_keyword}")
                 return False
 
-            purpose = self.get_element_by_css(Selector.SELECT_SPORTS)
-            players = self.get_element_by_css(Selector.SELECT_PLAYERS)
+            purpose = self.get_element_by_css(Selector.RESERVE_SELECT_PURPOSE)
+            players = self.get_element_by_css(Selector.RESERVE_INPUT_PLAYERS)
             if purpose is None or players is None:
+                # 画面が進まないのはサイト側が理由を出していることが多いので拾う
+                notice = self.get_element_by_css(Selector.LOGIN_ERROR_MESSAGE)
+                reason = f" / {notice.text.strip()}" if notice else ""
                 self.logger.error(
-                    f"種目・人数の入力欄が表示されていません: {facility_keyword}"
+                    f"種目・人数の入力欄が表示されていません: {facility_keyword}{reason}"
                 )
                 return False
             self.select_by_value(purpose, self.TENNIS_PURPOSE_VALUE)
