@@ -255,6 +255,26 @@ class TestRun:
         assert logins[-1] is MASTER
         netaichi.reserve_available_slot.assert_called_once()
 
+    def test_skips_reservation_with_unknown_owner(self):
+        event = _ev(6, 13, 0, lesson=True, practice=False, court=BEAR_COURT)
+        with (
+            patch("netaichi.services.cancel.load_rules", return_value=CONF),
+            patch("netaichi.services.cancel.TennisBear") as tennis_bear_class,
+            patch("netaichi.services.cancel.NetAichi") as netaichi_class,
+            patch("netaichi.services.cancel.notify"),
+        ):
+            tennis_bear = tennis_bear_class.return_value.__enter__.return_value
+            tennis_bear.list_organized_events.return_value = [event]
+            netaichi = netaichi_class.return_value.__enter__.return_value
+            netaichi.get.reservation.return_value = _reservations(account="")
+
+            cancelled, warned = run(target_date=TARGET)
+
+        assert cancelled == []
+        assert warned == []
+        netaichi.cancel_reservation.assert_not_called()
+        tennis_bear.delete_event.assert_not_called()
+
     def test_continues_after_one_reservation_group_raises(self):
         first = _ev(6, 13, 0, lesson=True, practice=False, court=BEAR_COURT)
         second = _ev(6, 15, 0, lesson=True, practice=False, court=BEAR_COURT)
@@ -456,6 +476,8 @@ class TestRun:
             call(TARGET, 15, 17, COURT_NAME, "1"),
             call(TARGET, 13, 17, COURT_NAME, "1"),
         ]
+        reset_index = netaichi.method_calls.index(call.reset_reservation_session())
+        assert netaichi.method_calls[reset_index + 1] == call.login(account=MASTER)
         tennis_bear.delete_event.assert_called_once_with(empty_event["id"])
 
     def test_keeps_bear_events_when_partial_rebook_and_restore_fail(self):

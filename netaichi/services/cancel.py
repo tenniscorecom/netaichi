@@ -350,7 +350,16 @@ def run(
                             cancelled.extend(reservation_targets)
                             continue
                         # 取消は持ち主のアカウントでしかできない
-                        na.login(account=owners.get(reservation.account_id, master))
+                        owner = owners.get(reservation.account_id)
+                        if owner is None:
+                            na.logger.warning(
+                                "予約の持ち主を特定できないため自動処理をスキップ: "
+                                f"{reservation.date:%Y-%m-%d} "
+                                f"{reservation.start}-{reservation.end}時 "
+                                f"{reservation.court_keyword}"
+                            )
+                            continue
+                        na.login(account=owner)
                         if not na.cancel_reservation(
                             reservation.date,
                             reservation.start,
@@ -381,6 +390,8 @@ def run(
                             continue
 
                         is_reset = na.reset_reservation_session()
+                        if is_reset:
+                            na.login(account=master)
                         if is_reset and na.reserve_available_slot(
                             reservation.date,
                             reservation.start,

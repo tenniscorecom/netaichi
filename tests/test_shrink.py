@@ -172,6 +172,34 @@ class TestRun:
         assert [slot.court_number for slot, _, _ in cancelled] == ["5"]
         assert netaichi.login.call_args.kwargs["account"] is member
 
+    def test_skips_surplus_with_unknown_owner(self):
+        master = M_Account(name="本人", id="master", password="x", is_master=True)
+        events = [_ev(9, 2)]
+        reservations = pd.DataFrame(
+            [
+                {
+                    "date": TARGET, "start": 9, "end": 13, "court": OTAKA,
+                    "court_number": number, "account": account,
+                }
+                for number, account in (("3", "master"), ("5", ""))
+            ]
+        )
+        with (
+            patch("netaichi.services.shrink.load_rules", return_value=CONF),
+            patch("netaichi.services.shrink.load_swap_rules", return_value={"courts": SWAP_COURTS}),
+            patch("netaichi.services.shrink.target_accounts", return_value=[master]),
+            patch("netaichi.services.shrink.collect_reservations", return_value=reservations),
+            patch("netaichi.services.shrink.TennisBear") as bear_class,
+            patch("netaichi.services.shrink.NetAichi") as netaichi_class,
+            patch("netaichi.services.shrink.notify"),
+        ):
+            bear_class.return_value.__enter__.return_value.list_organized_events.return_value = events
+            netaichi = netaichi_class.return_value.__enter__.return_value
+            cancelled = run(target_date=TARGET)
+
+        assert cancelled == []
+        netaichi.cancel_reservation.assert_not_called()
+
 
 class TestFindSurplusCourts:
     def test_two_courts_with_three_people_shrink_to_one(self):

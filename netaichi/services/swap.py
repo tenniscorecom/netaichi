@@ -178,9 +178,10 @@ def target_accounts(group_name: str, logger=None) -> list[M_Account]:
         logger.warning(
             f"アカウント一覧をDBから引けないため、環境変数の{1 + len(members)}件で動かします"
         )
+    account_ids = list(dict.fromkeys([group_id, *members]))
     return [
         M_Account(name="", id=account_id, password=default_pw, is_master=account_id == group_id)
-        for account_id in [group_id, *members]
+        for account_id in account_ids
     ]
 
 

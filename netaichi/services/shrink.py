@@ -231,7 +231,16 @@ def run(
         for item in surplus:
             slot = item[0]
             # 取消は持ち主のアカウントでしかできない
-            na.login(account=owners.get(slot.account_id, master))
+            owner = owners.get(slot.account_id)
+            if owner is None:
+                na.logger.warning(
+                    "予約の持ち主を特定できないため自動取消をスキップ: "
+                    f"{slot.date:%Y-%m-%d} {slot.start}-{slot.end}時 "
+                    f"{slot.court_keyword}"
+                )
+                failed.append(item)
+                continue
+            na.login(account=owner)
             if na.cancel_reservation(
                 slot.date, slot.start, slot.end, slot.court_keyword, slot.court_number
             ):
