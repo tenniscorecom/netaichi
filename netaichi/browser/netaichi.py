@@ -511,16 +511,24 @@ class NetAichi(Jsp):
                 available_icon.click()
                 time.sleep(0.5)
 
+            # どの段階で止まったか分かるようにする。画面遷移が1つでも欠けると
+            # 種目・人数の入力欄に辿り着かず、原因の切り分けができなくなる
             if not self.click(Selector.BTN_CART_ADD):
+                self.logger.error(f"カートに追加できません: {facility_keyword}")
                 return False
             if not self.click(Selector.BTN_CART_CONFIRM):
+                self.logger.error(f"カートの内容確認へ進めません: {facility_keyword}")
                 return False
             if not self.click(Selector.BTN_RESERVATION_PROCEED):
+                self.logger.error(f"予約手続きへ進めません: {facility_keyword}")
                 return False
 
             purpose = self.get_element_by_css(Selector.SELECT_SPORTS)
             players = self.get_element_by_css(Selector.SELECT_PLAYERS)
             if purpose is None or players is None:
+                self.logger.error(
+                    f"種目・人数の入力欄が表示されていません: {facility_keyword}"
+                )
                 return False
             self.select_by_value(purpose, self.TENNIS_PURPOSE_VALUE)
             players.clear()
