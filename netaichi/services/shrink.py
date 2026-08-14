@@ -14,6 +14,7 @@ import yaml
 from netaichi.browser import NetAichi
 from netaichi.browser.tennisbear import TennisBear
 from netaichi.config import IS_HEADLESS, RULES_DIR
+from netaichi.helper import court_label
 from netaichi.notify import notify
 from netaichi.services.cancel import (
     ACCOUNT_GROUP,
@@ -166,7 +167,7 @@ def format_message(cancelled: list[tuple[ReservationSlot, int, int]]) -> str:
         weekday = WEEKDAY[slot.date.weekday()]
         lines.append(
             f"・{slot.date:%m/%d}({weekday}) {slot.start}-{slot.end}時 "
-            f"{slot.court_name} 庭球場{slot.court_number} を取消"
+            f"{slot.court_name} {court_label(slot.court_number)} を取消"
             f"（{current}面 → {needed}面）"
         )
     lines += ["", "テニスベアの募集が残っている場合は、面数に合っているか確認してください。"]
@@ -179,7 +180,7 @@ def format_failure_message(failed: list[tuple[ReservationSlot, int, int]]) -> st
         weekday = WEEKDAY[slot.date.weekday()]
         lines.append(
             f"・{slot.date:%m/%d}({weekday}) {slot.start}-{slot.end}時 "
-            f"{slot.court_name} 庭球場{slot.court_number}"
+            f"{slot.court_name} {court_label(slot.court_number)}"
             f"（{current}面 → {needed}面にしたい）"
         )
     return "\n".join(lines)
@@ -223,7 +224,7 @@ def run(
             na.logger.info(
                 f"{slot.date:%Y-%m-%d} {slot.start}-{slot.end}時 {slot.court_name}: "
                 f"現在{current}面 → 必要{needed}面 "
-                f"（庭球場{slot.court_number}を取消）"
+                f"（{court_label(slot.court_number)}を取消）"
             )
         if not execute:
             return surplus

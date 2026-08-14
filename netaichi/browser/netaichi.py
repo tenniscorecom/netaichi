@@ -10,7 +10,7 @@ import re
 import time
 from unicodedata import normalize
 
-from netaichi.helper import filter_applied, sqlmodel_to_df
+from netaichi.helper import court_label, filter_applied, sqlmodel_to_df
 from netaichi.config import IS_HEADLESS
 
 
@@ -364,6 +364,17 @@ class NetAichi(Jsp):
                 break
         return slots
 
+    def _facility_keyword(self, court_number: str) -> str:
+        """面の識別子から、予約一覧で照合するコート名を組み立てる
+
+        数字なら庭球場の面番号（6 → 庭球場6）。フットサル場のように番号が
+        振られていないコートは、識別子がコート名そのもの（フットサル場B）
+        なのでそのまま使う。
+        """
+        if court_number.isdigit():
+            return f"{self.TENNIS_FACILITY_PREFIX}{court_number}"
+        return court_number
+
     def _facility_matches(self, text: str, facility_keyword: str) -> bool:
         """コート名が facility_keyword と一致するか（番号の直後が数字でないことを確認）
 
@@ -431,7 +442,7 @@ class NetAichi(Jsp):
                     continue
                 y, mo, d, h = map(int, m.groups())
                 facility_matches = normalized_number is None or self._facility_matches(
-                    txt, f"{self.TENNIS_FACILITY_PREFIX}{normalized_number}"
+                    txt, self._facility_keyword(normalized_number)
                 )
                 if not (
                     dd(y, mo, d) == date
@@ -662,20 +673,20 @@ class NetAichi(Jsp):
                     self.logger.info(
                         f"コート予約を取り直しました: "
                         f"{date:%Y-%m-%d} {start}-{end}時 "
-                        f"{court_name} 庭球場{court_number}"
+                        f"{court_name} {court_label(court_number)}"
                     )
                     return True
             self.logger.error(
                 f"取り直した予約を一覧で確認できません: "
                 f"{date:%Y-%m-%d} {start}-{end}時 "
-                f"{court_name} 庭球場{court_number}"
+                f"{court_name} {court_label(court_number)}"
             )
             return False
         except Exception:
             self.logger.error(
                 f"取り直した予約の確認中にエラー: "
                 f"{date:%Y-%m-%d} {start}-{end}時 "
-                f"{court_name} 庭球場{court_number}",
+                f"{court_name} {court_label(court_number)}",
                 exc_info=True,
             )
             return False

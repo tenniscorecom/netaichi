@@ -13,6 +13,7 @@ import yaml
 from netaichi.browser import NetAichi
 from netaichi.browser.tennisbear import TennisBear
 from netaichi.config import IS_HEADLESS, RULES_DIR
+from netaichi.helper import court_label
 from netaichi.notify import notify
 from netaichi.services.event_times import fill_event_ends
 from netaichi.services.swap import master_account, target_accounts
@@ -199,7 +200,7 @@ def format_partial_rebook_message(
             f"・{reservation.date:%m/%d}({weekday}) "
             f"{reservation.start}-{reservation.end}時 → "
             f"{kept_start}-{kept_end}時 "
-            f"{reservation.court_name} 庭球場{reservation.court_number}"
+            f"{reservation.court_name} {court_label(reservation.court_number)}"
         )
     return "\n".join(lines)
 
@@ -211,7 +212,7 @@ def format_rollback_message(rolled_back: list[ReservationSlot]) -> str:
         lines.append(
             f"・{reservation.date:%m/%d}({weekday}) "
             f"{reservation.start}-{reservation.end}時 "
-            f"{reservation.court_name} 庭球場{reservation.court_number}"
+            f"{reservation.court_name} {court_label(reservation.court_number)}"
         )
     return "\n".join(lines)
 
@@ -223,7 +224,7 @@ def format_rebook_failure_message(failed: list[ReservationSlot]) -> str:
         lines.append(
             f"・{reservation.date:%m/%d}({weekday}) "
             f"{reservation.start}-{reservation.end}時 "
-            f"{reservation.court_name} 庭球場{reservation.court_number}"
+            f"{reservation.court_name} {court_label(reservation.court_number)}"
         )
     return "\n".join(lines)
 
@@ -235,7 +236,7 @@ def format_processing_failure_message(failed: list[ReservationSlot]) -> str:
         lines.append(
             f"・{reservation.date:%m/%d}({weekday}) "
             f"{reservation.start}-{reservation.end}時 "
-            f"{reservation.court_name} 庭球場{reservation.court_number}"
+            f"{reservation.court_name} {court_label(reservation.court_number)}"
         )
     return "\n".join(lines)
 
@@ -250,7 +251,7 @@ def format_post_cancel_failure_message(failed: list[ReservationSlot]) -> str:
         lines.append(
             f"・{reservation.date:%m/%d}({weekday}) "
             f"{reservation.start}-{reservation.end}時 "
-            f"{reservation.court_name} 庭球場{reservation.court_number}"
+            f"{reservation.court_name} {court_label(reservation.court_number)}"
         )
     return "\n".join(lines)
 

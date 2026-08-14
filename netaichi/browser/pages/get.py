@@ -10,6 +10,23 @@ if TYPE_CHECKING:
     from .base import Jsp
 
 
+def court_number_of(court_name: str) -> str:
+    """予約一覧のコート名から面の識別子を取り出す
+
+    「庭球場6(人工芝)」→「6」。番号が振られていないコートは
+    「フットサル場B」「第2コート16」のように名前をそのまま返し、
+    取消時の照合にそのまま使えるようにする。
+
+    以前は「場」の次から「(」までを切り出していたため、カッコの無いコート名で
+    末尾が1文字欠けていた（第2コート16 → 第2コート1）。フットサル場は
+    識別子が空になり、どの面か分からなくなっていた。
+    """
+    base = court_name.split("(")[0].strip()
+    marker = base.find("場")
+    number = base[marker + 1:] if marker >= 0 else base
+    return number if number.isdigit() else base
+
+
 class JspGet:
     def __init__(self, jsp) -> None:
         self.jsp: Jsp = jsp
@@ -66,9 +83,7 @@ class JspGet:
                 start = date_split[2].removesuffix("時")
                 end = date_split[4].removesuffix("時")
                 court = court_split[0]
-                court_number = court_split[2][
-                    court_split[2].find("場") + 1 : court_split[2].find("(")
-                ]
+                court_number = court_number_of(court_split[2])
                 temp.append(
                     {
                         "court": court,

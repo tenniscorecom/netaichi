@@ -15,6 +15,16 @@ def shift_off_closed_day(date: datetime, closed_weekday: int | None) -> datetime
     return date
 
 
+def court_label(court_number) -> str:
+    """通知やログに出すコート名（純粋関数）
+
+    予約一覧の面の識別子は、庭球場なら番号だけ（6）、番号が振られていない
+    コートは名前そのもの（フットサル場B）。数字のときだけ「庭球場」を補う。
+    """
+    text = str(court_number)
+    return f"庭球場{text}" if text.isdigit() else text
+
+
 def sqlmodel_to_df(objs: list[SQLModel]) -> pd.DataFrame:
     """Convert a SQLModel objects into a pandas DataFrame."""
     records = [i.model_dump() for i in objs]

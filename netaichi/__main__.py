@@ -288,6 +288,7 @@ def main():
             for ev in warned:
                 print(f"  {ev['date']:%m/%d} {ev['start']}時 {ev['court']}")
         case "shrink":
+            from netaichi.helper import court_label
             from netaichi.services.shrink import run
 
             surplus = run(execute=not args.dry_run, headless=args.headless)
@@ -296,7 +297,7 @@ def main():
             for slot, needed, current in surplus:
                 print(
                     f"  {slot.date:%m/%d} {slot.start}-{slot.end}時 {slot.court_name} "
-                    f"庭球場{slot.court_number}（{current}面 → {needed}面）"
+                    f"{court_label(slot.court_number)}（{current}面 → {needed}面）"
                 )
         case "eaichi-notice":
             from netaichi.services.eaichi_notice import run
