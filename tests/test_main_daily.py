@@ -14,6 +14,7 @@ def test_daily_notifies_failure_continues_and_raises_at_end():
     with (
         patch("netaichi.services.prune.run", prune_run),
         patch("netaichi.services.cancel.run", cancel_run),
+        patch("netaichi.services.shrink.run", return_value=[]),
         patch("netaichi.services.eaichi_notice.run", notice_run),
         patch("netaichi.notify.notify") as notify,
         pytest.raises(RuntimeError, match="prune"),
@@ -33,6 +34,7 @@ def test_daily_runs_phases_in_required_order():
     with (
         patch("netaichi.services.prune.run", side_effect=lambda **_: order.append("prune") or []),
         patch("netaichi.services.cancel.run", side_effect=lambda **_: order.append("cancel") or ([], [])),
+        patch("netaichi.services.shrink.run", side_effect=lambda **_: order.append("shrink") or []),
         patch(
             "netaichi.services.eaichi_notice.run",
             side_effect=lambda **_: order.append("eaichi_notice") or [],
@@ -40,21 +42,26 @@ def test_daily_runs_phases_in_required_order():
     ):
         _run_daily(headless=False)
 
-    assert order == ["prune", "cancel", "eaichi_notice"]
+    assert order == ["prune", "cancel", "shrink", "eaichi_notice"]
 
 
 def test_daily_runs_notice_after_cancel_failure_and_raises_at_end():
     notice_run = Mock(return_value=[])
 
+    shrink_run = Mock(return_value=[])
+
     with (
         patch("netaichi.services.prune.run", return_value=[]),
         patch("netaichi.services.cancel.run", side_effect=RuntimeError("取消エラー")),
+        patch("netaichi.services.shrink.run", shrink_run),
         patch("netaichi.services.eaichi_notice.run", notice_run),
         patch("netaichi.notify.notify"),
         pytest.raises(RuntimeError, match="cancel"),
     ):
         _run_daily(headless=True)
 
+    # cancelが落ちてもshrinkは動く（面を多めに残す側へ倒れるので安全）
+    shrink_run.assert_called_once_with(headless=True)
     notice_run.assert_called_once_with(headless=True)
 
 

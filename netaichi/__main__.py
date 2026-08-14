@@ -29,7 +29,7 @@ def _notify_safely(message: str) -> None:
 
 def _run_daily(headless: bool) -> None:
     """毎日の処理。1フェーズが落ちても残りを進め、失敗は必ず通知して非ゼロ終了する"""
-    from netaichi.services import cancel, eaichi_notice, prune
+    from netaichi.services import cancel, eaichi_notice, prune, shrink
 
     failed_phases: list[str] = []
 
@@ -60,6 +60,11 @@ def _run_daily(headless: bool) -> None:
             "🚨 prune が失敗したため cancel を安全側でスキップしました。"
             "コート予約を手動で確認してください。"
         )
+
+    # cancelが0人・自分のみの枠を消した後の状態で、残りの面数を人数に合わせる。
+    # shrinkは必要面数が1以上の枠しか触らないのでcancelと担当が重ならず、
+    # prune/cancelが落ちて募集が余計に残っていても面を多めに残す側へ倒れる
+    run_phase("shrink", shrink.run, "shrink 取消")
 
     # eあいちの窓口案内は、上の2つで消えた分を通知しないよう最後に回す
     run_phase("eaichi_notice", eaichi_notice.run, "窓口取消の案内")

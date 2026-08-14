@@ -16,7 +16,8 @@ import yaml
 from dateutil.relativedelta import relativedelta
 
 from netaichi.browser import NetAichi
-from netaichi.config import IS_HEADLESS, RULES_DIR
+from netaichi.config import IS_HEADLESS, RULES_DIR, default_pw
+from netaichi.db import M_Account
 from netaichi.notify import notify
 from netaichi.services.availability import merge_hour_slots
 from netaichi.services.lottery import GROUP_IDS, get_group_accounts
@@ -147,6 +148,20 @@ def find_swap_targets(
     return targets
 
 
+def target_accounts(group_name: str) -> list[M_Account]:
+    """対象アカウントの一覧を返す
+
+    DBはリポジトリに含めていないため、GitHub Actions のような環境では
+    アカウント一覧を引けない。その場合はマスターだけを対象にする。
+    予約の大半はマスターが持っているので、これでも大半は拾える。
+    """
+    group_id = GROUP_IDS[group_name]
+    accounts = get_group_accounts(group_id)
+    if accounts:
+        return accounts
+    return [M_Account(name="", id=group_id, password=default_pw)]
+
+
 def collect_reservations(
     browser: NetAichi,
     accounts: list,
@@ -251,7 +266,7 @@ def run(execute: bool = True, headless: bool = IS_HEADLESS) -> list[SwapTarget]:
     today = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
     start_date = today + timedelta(days=conf.get("min_days_ahead", 2))
     end_date = today + relativedelta(months=conf.get("months_ahead", 2))
-    accounts = get_group_accounts(GROUP_IDS[conf.get("group", "oguri")])
+    accounts = target_accounts(conf.get("group", "oguri"))
 
     swapped: list[SwapTarget] = []
     orphaned: list[SwapTarget] = []

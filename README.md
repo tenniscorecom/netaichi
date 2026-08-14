@@ -40,6 +40,21 @@ poetry install --no-root
 - 掲載済みの枠は `T_BearPost` テーブルで管理し二重掲載しない
 - `submit: false`（確認モード）の間はフォーム入力まで行い確定ボタンを押さない
 
+## 定期実行
+
+GitHub Actions（`.github/workflows/`）が本体。
+
+| ワークフロー | 実行 | 内容 |
+|---|---|---|
+| `daily.yml` | 毎日 8:13 JST | prune → cancel → **shrink** → eaichi-notice |
+| `swap.yml` | 毎時37分（JST 8時台を除く） | コート乗り換え |
+| `availability*.yml` | 毎時／15分 | 空き通知 |
+
+> [!important] swap は GitHub Actions ではマスターの予約しか見ない
+> アカウント一覧はDB（`*.sqlite`）にあり、これはリポジトリに含めていない。
+> DBを引けない環境ではマスターだけを対象にする。全アカウントを見るには
+> DBのあるローカルで実行する。
+
 ## コート乗り換え
 
 抽選で当たったコートは番号を選べないため、予約済みの枠と同じ日時により良い番号が
