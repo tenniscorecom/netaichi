@@ -4,11 +4,14 @@ from unittest.mock import Mock, call
 
 from sqlalchemy.exc import OperationalError
 
+from netaichi.db import M_Account
 from netaichi.services.swap import (
     court_rank,
     covers,
     find_swap_targets,
+    format_message,
     format_orphan_message,
+    master_account,
     normalize_number,
     parse_court_number,
     _swap_one,
@@ -229,23 +232,71 @@ class TestFormatOrphanMessage:
         assert "予約状況の一覧" in message
 
 
+MASTER = M_Account(name="", id="master", password="x", is_master=True)
+OWNER = M_Account(name="", id="owner", password="x")
+
+
+def _target_of(account="owner"):
+    return find_swap_targets([_reservation(5, account=account)], [_slot(3)], COURTS)[0]
+
+
+def _flow(browser):
+    """順序の検証に使う呼び出しだけ取り出す"""
+    return [
+        c
+        for c in browser.method_calls
+        if c[0] in ("login", "reserve_available_slot", "cancel_reservation")
+    ]
+
+
 class TestSwapOne:
-    def test_reserves_then_cancels_only_after_confirmation(self):
+    def test_reserves_as_master_then_cancels_as_owner(self):
+        """移動先はマスターで取り、元は持ち主で取り消す（名義が本人へ移る）"""
         browser = Mock()
         browser.reserve_available_slot.return_value = True
         browser.cancel_reservation.return_value = True
-        target = find_swap_targets([_reservation(5)], [_slot(3)], COURTS)[0]
 
-        assert _swap_one(browser, target, []) is True
-        assert browser.method_calls[:2] == [
+        assert _swap_one(browser, _target_of(), MASTER, OWNER, []) is True
+        assert _flow(browser) == [
+            call.login(account=MASTER),
             call.reserve_available_slot(TARGET, 9, 13, OTAKA, "3"),
+            call.login(account=OWNER),
             call.cancel_reservation(TARGET, 9, 13, OTAKA, "5"),
         ]
 
     def test_does_not_cancel_when_destination_is_unconfirmed(self):
         browser = Mock()
         browser.reserve_available_slot.return_value = False
-        target = find_swap_targets([_reservation(5)], [_slot(3)], COURTS)[0]
 
-        assert _swap_one(browser, target, []) is False
+        assert _swap_one(browser, _target_of(), MASTER, OWNER, []) is False
         browser.cancel_reservation.assert_not_called()
+
+    def test_records_orphan_when_original_cannot_be_cancelled(self):
+        """移動先は取れたのに元を消せない＝2面持ち。必ず記録して通知する"""
+        browser = Mock()
+        browser.reserve_available_slot.return_value = True
+        browser.cancel_reservation.return_value = False
+        orphaned = []
+
+        assert _swap_one(browser, _target_of(), MASTER, OWNER, orphaned) is False
+        assert len(orphaned) == 1
+
+
+class TestMasterAccount:
+    def test_picks_the_master(self):
+        assert master_account([OWNER, MASTER]) is MASTER
+
+    def test_falls_back_to_first(self):
+        assert master_account([OWNER]) is OWNER
+
+
+class TestFormatMessage:
+    def test_marks_renamed_slots(self):
+        message = format_message([_target_of("owner")], "master")
+
+        assert "名義も本人へ" in message
+
+    def test_no_mark_when_already_master(self):
+        message = format_message([_target_of("master")], "master")
+
+        assert "名義も本人へ" not in message

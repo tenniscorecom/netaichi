@@ -13,6 +13,9 @@ load_dotenv(ROOT_DIR / '.env')
 default_pw = os.environ['NETAICHI_DEFAULT_PW']
 OGURI_ACCOUNT_ID = os.environ['OGURI_ACCOUNT_ID']
 KOMADA_ACCOUNT_ID = os.environ['KOMADA_ACCOUNT_ID']
+# マスター以外のアカウントID（カンマ区切り）。DBを持たないGitHub Actionsで使う。
+# パスワードは全員 default_pw なのでIDだけで足りる
+OGURI_MEMBER_IDS = os.environ.get('OGURI_MEMBER_IDS', '')
 
 # Google スプレッドシート
 OGURI_GSS_ID = os.environ['OGURI_GSS_ID']

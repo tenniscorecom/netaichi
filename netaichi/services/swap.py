@@ -17,7 +17,7 @@ from dateutil.relativedelta import relativedelta
 from sqlalchemy.exc import OperationalError
 
 from netaichi.browser import NetAichi
-from netaichi.config import IS_HEADLESS, RULES_DIR, default_pw
+from netaichi.config import IS_HEADLESS, OGURI_MEMBER_IDS, RULES_DIR, default_pw
 from netaichi.db import M_Account
 from netaichi.notify import notify
 from netaichi.services.availability import merge_hour_slots
@@ -149,13 +149,17 @@ def find_swap_targets(
     return targets
 
 
+# DBを持たない環境向けのアカウントID（マスター以外）
+GROUP_MEMBER_IDS = {"oguri": OGURI_MEMBER_IDS}
+
+
 def target_accounts(group_name: str, logger=None) -> list[M_Account]:
-    """対象アカウントの一覧を返す
+    """対象アカウントの一覧を返す（先頭がマスター）
 
     アカウント一覧はDB（*.sqlite）にあるが、これはリポジトリに含めていない。
-    GitHub Actions のような環境ではDBファイルが無く、接続はできてもテーブルが
-    無いため OperationalError になる。その場合はマスターだけを対象にする。
-    予約の大半はマスターが持っているので、これでも大半は拾える。
+    GitHub Actions ではDBファイルが無く、接続はできてもテーブルが無いため
+    OperationalError になる。その場合は環境変数のIDで組み立てる。
+    パスワードは全員 default_pw なので、IDが分かればログインできる。
     """
     group_id = GROUP_IDS[group_name]
     try:
@@ -164,11 +168,25 @@ def target_accounts(group_name: str, logger=None) -> list[M_Account]:
         accounts = []
     if accounts:
         return accounts
+
+    members = [
+        member.strip()
+        for member in GROUP_MEMBER_IDS.get(group_name, "").split(",")
+        if member.strip()
+    ]
     if logger is not None:
         logger.warning(
-            f"アカウント一覧を引けないため、マスター（{group_id}）だけを対象にします"
+            f"アカウント一覧をDBから引けないため、環境変数の{1 + len(members)}件で動かします"
         )
-    return [M_Account(name="", id=group_id, password=default_pw)]
+    return [
+        M_Account(name="", id=account_id, password=default_pw, is_master=account_id == group_id)
+        for account_id in [group_id, *members]
+    ]
+
+
+def master_account(accounts: list[M_Account]) -> M_Account:
+    """窓口へ行く本人のアカウント。取り直しはすべてここに寄せる"""
+    return next((account for account in accounts if account.is_master), accounts[0])
 
 
 def collect_reservations(
@@ -222,14 +240,16 @@ def collect_slots(
     return merge_hour_slots(slots)
 
 
-def format_message(targets: list[SwapTarget]) -> str:
+def format_message(targets: list[SwapTarget], master_id: str = "") -> str:
     lines = ["🔄 より良いコートへ移動しました"]
     for target in targets:
         weekday = WEEKDAY[target.date.weekday()]
+        # 取り直しは常にマスターなので、他人名義だった枠は本人名義になる
+        renamed = " ※名義も本人へ" if target.account_id != master_id else ""
         lines.append(
             f"・{target.date:%m/%d}({weekday}) {target.start}-{target.end}時 "
             f"{target.park} {target.prefix}{target.from_number}"
-            f" → {target.prefix}{target.to_number}"
+            f" → {target.prefix}{target.to_number}{renamed}"
         )
     return "\n".join(lines)
 
@@ -277,6 +297,7 @@ def run(execute: bool = True, headless: bool = IS_HEADLESS) -> list[SwapTarget]:
     end_date = today + relativedelta(months=conf.get("months_ahead", 2))
     swapped: list[SwapTarget] = []
     orphaned: list[SwapTarget] = []
+    master_id = ""
     with NetAichi(headless) as na:
         accounts = target_accounts(conf.get("group", "oguri"), na.logger)
         reservations = collect_reservations(
@@ -296,34 +317,44 @@ def run(execute: bool = True, headless: bool = IS_HEADLESS) -> list[SwapTarget]:
         if not execute:
             return targets
 
-        for account in accounts:
-            account_targets = [t for t in targets if t.account_id == account.id]
-            if not account_targets:
+        master = master_account(accounts)
+        master_id = master.id
+        owners = {account.id: account for account in accounts}
+        # 同じ持ち主の枠を続けて処理し、アカウントの切り替え回数を減らす
+        for target in sorted(targets, key=lambda t: t.account_id):
+            if not _swap_one(na, target, master, owners[target.account_id], orphaned):
                 continue
-            na.login(account=account)
-            for target in account_targets:
-                if not _swap_one(na, target, orphaned):
-                    continue
-                swapped.append(target)
+            swapped.append(target)
 
     if swapped:
-        notify(format_message(swapped))
+        notify(format_message(swapped, master_id))
     if orphaned:
         notify(format_orphan_message(orphaned))
     return swapped
 
 
 def _swap_one(
-    browser: NetAichi, target: SwapTarget, orphaned: list[SwapTarget]
+    browser: NetAichi,
+    target: SwapTarget,
+    master: M_Account,
+    owner: M_Account,
+    orphaned: list[SwapTarget],
 ) -> bool:
-    """1枠を移動する。移動先を確保できてから元を取り消す"""
+    """1枠を移動する。移動先を確保できてから元を取り消す
+
+    移動先は必ずマスターで取る。窓口へ行くのは本人だけなので、乗り換えのついでに
+    名義を本人へ寄せる。移動先は空き枠なので先に押さえられ、枠を失う心配はない。
+    元の予約は持ち主のアカウントでしか取り消せないので、そこだけ切り替える。
+    """
     weekday = WEEKDAY[target.date.weekday()]
+    moved_owner = "" if owner.id == master.id else f"（{owner.id} → {master.id}）"
     label = (
         f"{target.date:%m/%d}({weekday}) {target.start}-{target.end}時 "
         f"{target.park} {target.prefix}{target.from_number}"
-        f"→{target.prefix}{target.to_number}"
+        f"→{target.prefix}{target.to_number}{moved_owner}"
     )
     try:
+        browser.login(account=master)
         if not browser.reserve_available_slot(
             target.date,
             target.start,
@@ -341,6 +372,7 @@ def _swap_one(
         return False
 
     try:
+        browser.login(account=owner)
         if browser.cancel_reservation(
             target.date,
             target.start,
