@@ -1,0 +1,22 @@
+# 参加人数に対して多すぎるコートの取消（ルールC）
+#
+# 2面取ってあっても参加人数が少なければ1面で足りる。余った面を取り消す。
+# 集客0・自分のみの取消は cancel（ルールB）が担当し、こちらは
+# 「2面以上あるときに減らす」だけを見る。
+#
+# days_before:       レッスン・練習日の何日前に判定するか（cancel と揃える）
+# lesson_courts:     レッスンに必要な面数。何人来ても1面で開催する
+# practice_capacity: 練習会の1面あたりの人数
+# summer_capacity:   夏の1面あたりの人数。暑くて休憩が増えるぶん、多くても回る
+# summer_months:     夏とみなす月
+# court_map:         テニスベアのコート名(部分一致) → ネットあいち予約一覧でのコート名
+#
+# 残す面は swap_rules.yaml の優先順位に従い、良い番号（ブロックの端）を残す。
+days_before: 2
+lesson_courts: 1
+practice_capacity: 3
+summer_capacity: 4
+summer_months: [7, 8]
+court_map:
+  大高緑地: 大高緑地
+  モリコロパーク: 愛・地球博記念公園

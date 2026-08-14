@@ -23,6 +23,10 @@ poetry install --no-root
 | `poetry run python -m netaichi reserve` | 予約情報を収集しスプレッドシートに反映 |
 | `poetry run python -m netaichi availability` | 空き状況をチェックし新規の空きをDiscordに通知 |
 | `poetry run python -m netaichi availability --no-notify` | 通知せず結果表示のみ（動作確認用） |
+| `poetry run python -m netaichi swap` | 予約済みの枠をより良い番号のコートへ移動 |
+| `poetry run python -m netaichi swap --dry-run` | 移動候補の表示のみ（移動しない） |
+| `poetry run python -m netaichi shrink` | 参加人数に対して多すぎるコートを取消（2面→1面など） |
+| `poetry run python -m netaichi shrink --dry-run` | 検出のみ（取り消さない） |
 | `poetry run python -m netaichi bear` | 予約確定分の募集をテニスベアに作成 |
 | `poetry run python -m netaichi bear --submit` | 確認モードを無視して確定まで実行 |
 
@@ -35,6 +39,36 @@ poetry install --no-root
 - 4時間の予約は2時間×2枠のイベントに分割される
 - 掲載済みの枠は `T_BearPost` テーブルで管理し二重掲載しない
 - `submit: false`（確認モード）の間はフォーム入力まで行い確定ボタンを押さない
+
+## コート乗り換え
+
+抽選で当たったコートは番号を選べないため、予約済みの枠と同じ日時により良い番号が
+空いていたら移動する。優先順位は `rules/swap_rules.yaml` で宣言する。
+
+**必ず「移動先を予約 → 予約一覧で成功を確認 → 元を取消」の順で実行する。**
+逆順にすると取り直しに失敗したとき枠そのものを失う。
+
+- 空きが予約時間を**完全に覆うときだけ**移動する（部分的だと枠が分断されるため）
+- 取消期限（前日15時）を過ぎると取消だけ失敗して2面持ちになるので、
+  `min_days_ahead` より手前の日は対象にしない
+- 元の取消に失敗した場合は自動で復旧せず、取り消すべき面を明記して Discord に通知する
+
+## 多すぎるコートの取消（shrink）
+
+2面取ってあっても参加人数が少なければ1面で足りる。余った面を `rules/shrink_rules.yaml`
+の基準で取り消す。
+
+- レッスンは何人来ても1面。練習会は**夏（7・8月）は4人／それ以外は3人**で1面
+- 4時間の予約に2時間の募集が並ぶ場合、**時間帯ごとに数えて多い方**に合わせる
+- 残す面は `swap_rules.yaml` の優先順位に従い、ブロックの端の面を残す
+- 募集が出ていない枠は判断材料がないので触らない
+- **1面しかない枠と、必要面数が0になる枠（集客0・自分のみ）は対象外**。
+  全面取消は `cancel` が募集削除・部分予約の取り直しまで含めて処理するので、
+  shrink が先に消すと二重取消になる。shrink は「最低1面は残す」場合だけ扱う
+
+参加人数は募集をまたいで合計する。主催者が複数の募集で重複して数えられていても、
+面が多めに残る側に倒れるので練習場所が足りなくなることはない。
+実際の人数と必要面数はログに出るので、ずれていれば YAML の人数を調整する。
 
 ## 空き状況チェックの定期実行
 

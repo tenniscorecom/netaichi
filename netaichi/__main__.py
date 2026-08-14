@@ -114,6 +114,16 @@ def main():
         "--sites", help="対象サイト（カンマ区切り: netaichi,eaichi,nagoya。省略時は全サイト）"
     )
 
+    p_swap = sub.add_parser(
+        "swap", help="予約済みの枠を、同じ日時で空いているより良い番号のコートへ移動"
+    )
+    p_swap.add_argument(
+        "--dry-run", action="store_true", help="移動候補の表示のみ（移動しない）"
+    )
+    p_swap.add_argument(
+        "--headless", action="store_true", help="ブラウザ画面を表示せず実行（定期実行用）"
+    )
+
     p_bear = sub.add_parser("bear", help="予約確定分の募集をテニスベアに作成")
     p_bear.add_argument(
         "--submit", action="store_true",
@@ -134,6 +144,16 @@ def main():
         "--dry-run", action="store_true", help="検出のみ（取消・削除しない）"
     )
     p_cancel.add_argument(
+        "--headless", action="store_true", help="ブラウザ画面を表示せず実行（定期実行用）"
+    )
+
+    p_shrink = sub.add_parser(
+        "shrink", help="参加人数に対して多すぎるコートを取消（2面→1面など）"
+    )
+    p_shrink.add_argument(
+        "--dry-run", action="store_true", help="検出のみ（取り消さない）"
+    )
+    p_shrink.add_argument(
         "--headless", action="store_true", help="ブラウザ画面を表示せず実行（定期実行用）"
     )
 
@@ -221,6 +241,17 @@ def main():
             print(f"空き: {len(slots)}件")
             for slot in slots:
                 print(f"  {slot['date']:%m/%d} {slot['start']}-{slot['end']}時 {slot['value']}")
+        case "swap":
+            from netaichi.services.swap import run
+
+            targets = run(execute=not args.dry_run, headless=args.headless)
+            action = "移動候補" if args.dry_run else "移動"
+            print(f"{action}: {len(targets)}件")
+            for t in targets:
+                print(
+                    f"  {t.date:%m/%d} {t.start}-{t.end}時 {t.park} "
+                    f"{t.prefix}{t.from_number} → {t.prefix}{t.to_number}"
+                )
         case "bear":
             from netaichi.services.bear import run
 
@@ -251,6 +282,17 @@ def main():
             print(f"通知のみ(2日後): {len(warned)}件")
             for ev in warned:
                 print(f"  {ev['date']:%m/%d} {ev['start']}時 {ev['court']}")
+        case "shrink":
+            from netaichi.services.shrink import run
+
+            surplus = run(execute=not args.dry_run, headless=args.headless)
+            action = "検出" if args.dry_run else "取消"
+            print(f"{action}: {len(surplus)}件")
+            for slot, needed, current in surplus:
+                print(
+                    f"  {slot.date:%m/%d} {slot.start}-{slot.end}時 {slot.court_name} "
+                    f"庭球場{slot.court_number}（{current}面 → {needed}面）"
+                )
         case "eaichi-notice":
             from netaichi.services.eaichi_notice import run
 
