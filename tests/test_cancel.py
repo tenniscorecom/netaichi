@@ -3,7 +3,9 @@ from datetime import datetime
 from unittest.mock import call, patch
 
 import pandas as pd
+import pytest
 
+from netaichi.db import M_Account
 from netaichi.services.cancel import (
     ReservationSlot,
     find_empty_lessons,
@@ -34,7 +36,13 @@ COURT_MAP = {"モリコロパーク": COURT_NAME}
 CONF = {"days_before": 2, "event_hours": 2, "court_map": COURT_MAP}
 
 
-def _reservations(start=13, end=17):
+MASTER_ID = "master"
+MEMBER_ID = "member"
+MASTER = M_Account(name="本人", id=MASTER_ID, password="x", is_master=True)
+MEMBER = M_Account(name="家族", id=MEMBER_ID, password="x")
+
+
+def _reservations(start=13, end=17, account=MASTER_ID):
     return pd.DataFrame(
         [
             {
@@ -43,6 +51,7 @@ def _reservations(start=13, end=17):
                 "end": str(end),
                 "court": COURT_NAME,
                 "court_number": "1",
+                "account": account,
             }
         ]
     )
@@ -101,7 +110,9 @@ class TestFindReservation:
             reservations,
         )
 
-        expected = ReservationSlot(TARGET, 13, 17, COURT_NAME, "1", COURT_NAME)
+        expected = ReservationSlot(
+            TARGET, 13, 17, COURT_NAME, "1", COURT_NAME, MASTER_ID
+        )
         assert first == expected
         assert second == expected
 
@@ -119,8 +130,12 @@ class TestFindReservation:
             reservations,
         )
 
-        assert first == ReservationSlot(TARGET, 13, 15, COURT_NAME, "1", COURT_NAME)
-        assert second == ReservationSlot(TARGET, 15, 17, COURT_NAME, "1", COURT_NAME)
+        assert first == ReservationSlot(
+            TARGET, 13, 15, COURT_NAME, "1", COURT_NAME, MASTER_ID
+        )
+        assert second == ReservationSlot(
+            TARGET, 15, 17, COURT_NAME, "1", COURT_NAME, MASTER_ID
+        )
 
     def test_same_time_events_match_different_courts(self):
         """同じ日時に2面あるとき、2件の募集はそれぞれ別の面に割り当てる"""
@@ -204,6 +219,42 @@ class TestFormatMessage:
 
 
 class TestRun:
+    @pytest.fixture(autouse=True)
+    def _accounts(self, monkeypatch):
+        """テストではDBを見ず、本人と家族の2アカウントで動かす"""
+        monkeypatch.setattr(
+            "netaichi.services.cancel.target_accounts",
+            lambda *args, **kwargs: [MASTER, MEMBER],
+        )
+
+    def test_cancels_as_owner_and_rebooks_as_master(self):
+        """他人名義の枠は持ち主で取り消し、取り直しは名義を寄せるためマスターで行う"""
+        empty = _ev(6, 13, 0, lesson=True, practice=False, court=BEAR_COURT)
+        occupied = _ev(6, 15, 2, lesson=True, practice=False, court=BEAR_COURT)
+
+        with (
+            patch("netaichi.services.cancel.load_rules", return_value=CONF),
+            patch("netaichi.services.cancel.TennisBear") as tennis_bear_class,
+            patch("netaichi.services.cancel.NetAichi") as netaichi_class,
+            patch("netaichi.services.cancel.notify"),
+        ):
+            tennis_bear = tennis_bear_class.return_value.__enter__.return_value
+            tennis_bear.list_organized_events.return_value = [empty, occupied]
+            tennis_bear.delete_event.return_value = True
+            netaichi = netaichi_class.return_value.__enter__.return_value
+            # 家族名義の4時間枠。前半だけ集客0なので後半を取り直す
+            netaichi.get.reservation.return_value = _reservations(account=MEMBER_ID)
+            netaichi.cancel_reservation.return_value = True
+            netaichi.reserve_available_slot.return_value = True
+
+            run(target_date=TARGET)
+
+        logins = [c.kwargs.get("account") for c in netaichi.login.call_args_list]
+        # 取消の直前は持ち主、取り直しの直前はマスターでログインしている
+        assert MEMBER in logins
+        assert logins[-1] is MASTER
+        netaichi.reserve_available_slot.assert_called_once()
+
     def test_continues_after_one_reservation_group_raises(self):
         first = _ev(6, 13, 0, lesson=True, practice=False, court=BEAR_COURT)
         second = _ev(6, 15, 0, lesson=True, practice=False, court=BEAR_COURT)

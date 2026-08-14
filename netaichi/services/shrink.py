@@ -13,10 +13,20 @@ import yaml
 
 from netaichi.browser import NetAichi
 from netaichi.browser.tennisbear import TennisBear
-from netaichi.config import IS_HEADLESS, OGURI_ACCOUNT_ID, RULES_DIR
+from netaichi.config import IS_HEADLESS, RULES_DIR
 from netaichi.notify import notify
-from netaichi.services.cancel import ReservationSlot, map_court
-from netaichi.services.swap import court_rank, normalize_number
+from netaichi.services.cancel import (
+    ACCOUNT_GROUP,
+    ReservationSlot,
+    collect_reservations,
+    map_court,
+)
+from netaichi.services.swap import (
+    court_rank,
+    master_account,
+    normalize_number,
+    target_accounts,
+)
 from netaichi.services.swap import load_rules as load_swap_rules
 
 WEEKDAY = ["月", "火", "水", "木", "金", "土", "日"]
@@ -87,6 +97,7 @@ def group_reservations(
                 court_name=court_name,
                 court_number=str(row.court_number),
                 court_keyword=court_name,
+                account_id=str(getattr(row, "account", "") or ""),
             )
         )
     return groups
@@ -202,8 +213,11 @@ def run(
     cancelled: list[tuple[ReservationSlot, int, int]] = []
     failed: list[tuple[ReservationSlot, int, int]] = []
     with NetAichi(headless) as na:
-        na.login(id=OGURI_ACCOUNT_ID)
-        surplus = find_surplus_courts(events, na.get.reservation(), conf, swap_courts)
+        accounts = target_accounts(ACCOUNT_GROUP, na.logger)
+        master = master_account(accounts)
+        owners = {account.id: account for account in accounts}
+        reservations = collect_reservations(na, accounts)
+        surplus = find_surplus_courts(events, reservations, conf, swap_courts)
         for slot, needed, current in surplus:
             # 人数の数え方が実態と合っているかは、この行を見て調整する
             na.logger.info(
@@ -216,6 +230,8 @@ def run(
 
         for item in surplus:
             slot = item[0]
+            # 取消は持ち主のアカウントでしかできない
+            na.login(account=owners.get(slot.account_id, master))
             if na.cancel_reservation(
                 slot.date, slot.start, slot.end, slot.court_keyword, slot.court_number
             ):

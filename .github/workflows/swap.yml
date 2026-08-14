@@ -32,12 +32,13 @@ jobs:
 
       - run: poetry install --no-root
 
-      # DBはリポジトリに含めていないため、ここではマスターの予約だけが対象になる。
-      # 全アカウントを見たい場合はDBのあるローカルで実行する。
+      # DBはリポジトリに含めていないので、アカウントは OGURI_MEMBER_IDS から組み立てる。
+      # 未設定ならマスターの予約だけが対象になる。
       - run: poetry run python -m netaichi swap --headless
         env:
           NETAICHI_DEFAULT_PW: ${{ secrets.NETAICHI_DEFAULT_PW }}
           OGURI_ACCOUNT_ID: ${{ secrets.OGURI_ACCOUNT_ID }}
+          OGURI_MEMBER_IDS: ${{ secrets.OGURI_MEMBER_IDS }}
           KOMADA_ACCOUNT_ID: ${{ secrets.KOMADA_ACCOUNT_ID }}
           OGURI_GSS_ID: ${{ secrets.OGURI_GSS_ID }}
           KOMADA_GSS_ID: ${{ secrets.KOMADA_GSS_ID }}

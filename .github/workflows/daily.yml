@@ -35,6 +35,7 @@ jobs:
         env:
           NETAICHI_DEFAULT_PW: ${{ secrets.NETAICHI_DEFAULT_PW }}
           OGURI_ACCOUNT_ID: ${{ secrets.OGURI_ACCOUNT_ID }}
+          OGURI_MEMBER_IDS: ${{ secrets.OGURI_MEMBER_IDS }}
           KOMADA_ACCOUNT_ID: ${{ secrets.KOMADA_ACCOUNT_ID }}
           OGURI_GSS_ID: ${{ secrets.OGURI_GSS_ID }}
           KOMADA_GSS_ID: ${{ secrets.KOMADA_GSS_ID }}

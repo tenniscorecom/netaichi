@@ -12,9 +12,10 @@ import yaml
 
 from netaichi.browser import NetAichi
 from netaichi.browser.tennisbear import TennisBear
-from netaichi.config import IS_HEADLESS, OGURI_ACCOUNT_ID, RULES_DIR
+from netaichi.config import IS_HEADLESS, RULES_DIR
 from netaichi.notify import notify
 from netaichi.services.event_times import fill_event_ends
+from netaichi.services.swap import master_account, target_accounts
 
 WEEKDAY = ["月", "火", "水", "木", "金", "土", "日"]
 
@@ -27,11 +28,30 @@ class ReservationSlot:
     court_name: str
     court_number: str
     court_keyword: str
+    # 予約の持ち主。取消はこのアカウントでしかできない。
+    # 取り直しは名義を寄せるため常にマスターで行う
+    account_id: str = ""
+
+
+ACCOUNT_GROUP = "oguri"
 
 
 def load_rules() -> dict:
     with open(RULES_DIR / "cancel_rules.yaml", encoding="utf-8") as f:
         return yaml.safe_load(f)
+
+
+def collect_reservations(browser: NetAichi, accounts: list) -> pd.DataFrame:
+    """グループ全アカウントの予約を集める
+
+    予約は取った本人のアカウントでしか取り消せないため、どの枠が誰のものかを
+    account 列で持ったまま扱う。
+    """
+    frames = []
+    for account in accounts:
+        browser.login(account=account)
+        frames.append(browser.get.reservation())
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
 def find_empty_lessons(events: list[dict], target_date: datetime) -> list[dict]:
@@ -100,6 +120,7 @@ def find_reservation(
                 court_name=str(row.court),
                 court_number=str(row.court_number),
                 court_keyword=court_keyword,
+                account_id=str(getattr(row, "account", "") or ""),
             )
             if (slot, event["start"]) in assigned:
                 continue
@@ -271,8 +292,10 @@ def run(
         post_cancel_failed: list[ReservationSlot] = []
         if targets:
             with NetAichi(headless) as na:
-                na.login(id=OGURI_ACCOUNT_ID)
-                reservations = na.get.reservation()
+                accounts = target_accounts(ACCOUNT_GROUP, na.logger)
+                master = master_account(accounts)
+                owners = {account.id: account for account in accounts}
+                reservations = collect_reservations(na, accounts)
                 reservation_groups: dict[ReservationSlot, list[dict]] = {}
                 assigned: set[tuple] = set()
                 for ev in targets:
@@ -326,6 +349,8 @@ def run(
                         if not execute:
                             cancelled.extend(reservation_targets)
                             continue
+                        # 取消は持ち主のアカウントでしかできない
+                        na.login(account=owners.get(reservation.account_id, master))
                         if not na.cancel_reservation(
                             reservation.date,
                             reservation.start,
@@ -340,6 +365,9 @@ def run(
                             cancelled.extend(reservation_targets)
                             continue
 
+                        # 取り直しは常にマスター。窓口へ行くのは本人だけなので
+                        # ここで名義を本人へ寄せる
+                        na.login(account=master)
                         kept_start, kept_end = retained_ranges[0]
                         if na.reserve_available_slot(
                             reservation.date,

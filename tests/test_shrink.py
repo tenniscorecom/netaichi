@@ -1,8 +1,10 @@
 """shrink（ルールC）の純粋ロジックのテスト"""
 from datetime import datetime
+from unittest.mock import patch
 
 import pandas as pd
 
+from netaichi.db import M_Account
 from netaichi.services.cancel import ReservationSlot
 from netaichi.services.shrink import (
     cancel_order,
@@ -10,6 +12,7 @@ from netaichi.services.shrink import (
     practice_capacity,
     required_courts,
     required_courts_for_reservation,
+    run,
 )
 
 
@@ -132,6 +135,42 @@ class TestCancelOrder:
         ordered = cancel_order([_slot("2", court="小幡緑地"), _slot("8", court="小幡緑地")], SWAP_COURTS)
 
         assert [s.court_number for s in ordered] == ["8", "2"]
+
+
+class TestRun:
+    def test_cancels_surplus_as_its_owner(self):
+        """余った面は持ち主のアカウントでログインしてから取り消す"""
+        master = M_Account(name="本人", id="master", password="x", is_master=True)
+        member = M_Account(name="家族", id="member", password="x")
+        events = [_ev(9, 2)]  # 2人 → 1面
+        reservations = pd.DataFrame(
+            [
+                {
+                    "date": TARGET, "start": 9, "end": 13, "court": OTAKA,
+                    "court_number": number, "account": account,
+                }
+                for number, account in (("3", "master"), ("5", "member"))
+            ]
+        )
+
+        with (
+            patch("netaichi.services.shrink.load_rules", return_value=CONF),
+            patch("netaichi.services.shrink.load_swap_rules", return_value={"courts": SWAP_COURTS}),
+            patch("netaichi.services.shrink.target_accounts", return_value=[master, member]),
+            patch("netaichi.services.shrink.collect_reservations", return_value=reservations),
+            patch("netaichi.services.shrink.TennisBear") as bear_class,
+            patch("netaichi.services.shrink.NetAichi") as netaichi_class,
+            patch("netaichi.services.shrink.notify"),
+        ):
+            bear_class.return_value.__enter__.return_value.list_organized_events.return_value = events
+            netaichi = netaichi_class.return_value.__enter__.return_value
+            netaichi.cancel_reservation.return_value = True
+
+            cancelled = run(target_date=TARGET)
+
+        # 真ん中の5番（家族名義）を取り消す。端の3番は残す
+        assert [slot.court_number for slot, _, _ in cancelled] == ["5"]
+        assert netaichi.login.call_args.kwargs["account"] is member
 
 
 class TestFindSurplusCourts:
