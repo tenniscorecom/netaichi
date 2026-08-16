@@ -164,8 +164,15 @@ def merge_event_ranges(
     return ranges
 
 
-def format_message(cancelled: list[dict]) -> str:
-    lines = ["🗑️ 不要枠をキャンセルしました（テニスベア募集削除・コート予約調整）"]
+def format_message(cancelled: list[dict], is_recheck: bool = False) -> str:
+    if is_recheck:
+        header = (
+            "🛟 前日に取り消せていなかった枠を再確認で回収しました"
+            "（テニスベア募集削除・コート予約調整）"
+        )
+    else:
+        header = "🗑️ 不要枠をキャンセルしました（テニスベア募集削除・コート予約調整）"
+    lines = [header]
     for ev in cancelled:
         w = WEEKDAY[ev["date"].weekday()]
         kind = "レッスン(集客0)" if ev["is_lesson"] else "練習会(自分のみ)"
@@ -256,13 +263,93 @@ def format_post_cancel_failure_message(failed: list[ReservationSlot]) -> str:
     return "\n".join(lines)
 
 
+def format_cancel_failure_message(
+    failed: list[ReservationSlot],
+    is_recheck: bool = False,
+) -> str:
+    """ネットあいちの取消APIが False を返した枠を通知する（手動取消が必要）"""
+    if is_recheck:
+        header = (
+            "🚨 前日の再確認でもコート取消に失敗しました。"
+            "ペナルティを避けるため至急手動で取り消してください"
+        )
+    else:
+        header = (
+            "🚨 コート取消に失敗しました。"
+            "ペナルティを避けるため手動で取り消してください"
+        )
+    lines = [header]
+    for reservation in failed:
+        weekday = WEEKDAY[reservation.date.weekday()]
+        lines.append(
+            f"・{reservation.date:%m/%d}({weekday}) "
+            f"{reservation.start}-{reservation.end}時 "
+            f"{reservation.court_name} {court_label(reservation.court_number)}"
+        )
+    return "\n".join(lines)
+
+
+def format_unmatched_reservation_message(
+    targets: list[dict],
+    is_recheck: bool = False,
+    single_account: bool = False,
+) -> str:
+    """テニスベアの募集時間帯に該当するネットあいち予約が見つからなかった枠"""
+    if is_recheck:
+        header = (
+            "⚠️ 再確認対象の募集に対応するネットあいち予約が見つかりません。"
+            "既にコート取消済みで募集だけ残っている可能性と、"
+            "他名義などで予約が残っている可能性があります。予約状況を確認してください"
+        )
+    else:
+        header = (
+            "⚠️ 対応するネットあいちの予約が見つかりません。"
+            "既に消えているか、他名義で取られている可能性があります"
+        )
+    lines = [header]
+    if single_account:
+        lines.append(
+            "※マスターアカウントのみで判定したため、他名義の予約は確認できていません"
+        )
+    for ev in targets:
+        weekday = WEEKDAY[ev["date"].weekday()]
+        lines.append(f"・{ev['date']:%m/%d}({weekday}) {ev['start']}時 {ev['court']}")
+    return "\n".join(lines)
+
+
+def format_unmatched_court_message(
+    targets: list[dict],
+    is_recheck: bool = False,
+) -> str:
+    """ネットあいちのコート一覧に存在しないコート（窓口取消が必要）"""
+    if is_recheck:
+        header = (
+            "⚠️ 前日時点でネットあいち未対応のコートが残っています。"
+            "窓口取消が必要です"
+        )
+    else:
+        header = (
+            "⚠️ ネットあいち未対応のコートです。"
+            "窓口取消が必要なので手動で対応してください"
+        )
+    lines = [header]
+    for ev in targets:
+        weekday = WEEKDAY[ev["date"].weekday()]
+        lines.append(f"・{ev['date']:%m/%d}({weekday}) {ev['start']}時 {ev['court']}")
+    return "\n".join(lines)
+
+
 def run(
     target_date: datetime | None = None,
     execute: bool = True,
     headless: bool = IS_HEADLESS,
+    is_recheck: bool = False,
 ) -> tuple[list[dict], list[dict]]:
     """翌日の0人レッスン・自分のみ練習会のコートを取消し、募集を削除する。
     2日後が対象の場合は通知のみ行う。
+
+    is_recheck=True のときは再確認パスとして動く。取りこぼし枠を再処理し、
+    平常時（対象0件）は何も通知しない。何か起きたときだけ文言を変えて通知する。
 
     Returns:
         (取消・削除したイベント, 2日後の警告対象イベント)
@@ -281,7 +368,7 @@ def run(
 
         # その1日先: 通知のみ（target_date指定時はスキップ）
         warn_targets = []
-        if target_date is None:
+        if target_date is None and not is_recheck:
             warn_date = today + timedelta(days=days_before + 1)
             warn_targets = find_empty_lessons(events, warn_date) + find_solo_practices(events, warn_date)
 
@@ -291,11 +378,18 @@ def run(
         rebook_failed: list[ReservationSlot] = []
         processing_failed: list[ReservationSlot] = []
         post_cancel_failed: list[ReservationSlot] = []
+        # 通知用に失敗ケースを収集する。再確認パスでは通常時と文言を切り替える
+        cancel_reservation_failed: list[ReservationSlot] = []
+        unmatched_reservation: list[dict] = []
+        unmatched_court: list[dict] = []
+        # 通知文に「マスターのみ判定」文言を添えるかどうかの判定に使う
+        single_account = False
         if targets:
             with NetAichi(headless) as na:
                 accounts = target_accounts(ACCOUNT_GROUP, na.logger)
                 master = master_account(accounts)
                 owners = {account.id: account for account in accounts}
+                single_account = len(accounts) == 1
                 reservations = collect_reservations(na, accounts)
                 reservation_groups: dict[ReservationSlot, list[dict]] = {}
                 assigned: set[tuple] = set()
@@ -303,6 +397,7 @@ def run(
                     keyword = map_court(ev["court"], conf["court_map"])
                     if keyword is None:
                         na.logger.warning(f"ネットあいち未対応コートのためスキップ: {ev['court']}")
+                        unmatched_court.append(ev)
                         continue
                     reservation = find_reservation(ev, keyword, reservations, assigned)
                     if reservation is None:
@@ -310,6 +405,7 @@ def run(
                             f"対応するコート予約が見つからないためスキップ: "
                             f"{ev['date']:%Y-%m-%d} {ev['start']}時 {ev['court']}"
                         )
+                        unmatched_reservation.append(ev)
                         continue
                     assigned.add((reservation, ev["start"]))
                     reservation_groups.setdefault(reservation, []).append(ev)
@@ -368,6 +464,10 @@ def run(
                             reservation.court_keyword,
                             reservation.court_number,
                         ):
+                            # False は「取消APIが失敗」を意味し、ペナルティに直結するため
+                            # 必ず Discord へ通知する。再確認パスでも再試行で失敗した
+                            # ケースに備えて is_recheck フラグはそのまま渡す
+                            cancel_reservation_failed.append(reservation)
                             continue
                         is_cancelled = True
 
@@ -432,7 +532,7 @@ def run(
                     held.append(ev)
 
     if execute and cancelled:
-        notify(format_message(cancelled))
+        notify(format_message(cancelled, is_recheck))
     if execute and held:
         notify(format_held_message(held))
     if execute and partial_rebooked:
@@ -447,4 +547,18 @@ def run(
         notify(format_post_cancel_failure_message(post_cancel_failed))
     if execute and warn_targets:
         notify(format_warning_message(warn_targets))
+    if execute and cancel_reservation_failed:
+        notify(format_cancel_failure_message(cancel_reservation_failed, is_recheck))
+    if execute and unmatched_reservation:
+        notify(
+            format_unmatched_reservation_message(
+                unmatched_reservation,
+                is_recheck,
+                single_account,
+            )
+        )
+    # 未対応コートは再確認してもネット取消できず、同じ枠を2日連続で通知するだけになる。
+    # 通常パスの期限直前通知は残し、再確認パスでは重複を抑える。
+    if execute and unmatched_court and not is_recheck:
+        notify(format_unmatched_court_message(unmatched_court, is_recheck))
     return cancelled, warn_targets

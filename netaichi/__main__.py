@@ -4,6 +4,7 @@
 """
 import argparse
 import re
+from datetime import datetime, timedelta
 
 
 SENSITIVE_VALUE_PATTERN = re.compile(
@@ -54,6 +55,27 @@ def _run_daily(headless: bool) -> None:
     # 練習で使うコートまで取り消しかねないので、安全側に倒してスキップする
     if is_pruned:
         run_phase("cancel", cancel.run, "cancel 取消・削除")
+
+        # 再確認パス: 通常のcancelは days_before 日後しか見ないため、
+        # 前日実行で取りこぼした枠は二度と自動処理されない。
+        # 1日前の枠についてもう一度判定し、残っていたら異常として通知する。
+        # 再確認パスは平常時（対象0件）に通知を出さない設計のため、ノイズには
+        # ならない。ネットあいちの取消期限（前日15時）を過ぎる前に拾うことが目的。
+        days_before = cancel.load_rules().get("days_before", 2)
+        recheck_date = (
+            datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
+            + timedelta(days=days_before - 1)
+        )
+
+        def _run_cancel_recheck(headless: bool):
+            return cancel.run(
+                target_date=recheck_date,
+                execute=True,
+                headless=headless,
+                is_recheck=True,
+            )
+
+        run_phase("cancel-recheck", _run_cancel_recheck, "cancel 再確認(1日前)")
     else:
         failed_phases.append("cancel")
         _notify_safely(
