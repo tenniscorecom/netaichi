@@ -138,6 +138,86 @@ class TestFindReservationUnmatched:
             if "⚠️" in c.args[0] and "対応するネットあいちの予約" in c.args[0]
         ]
         assert len(warning_calls) == 1
+        # 「募集を削除した」ことが分かる文言が必ず入る
+        assert "テニスベアの募集を削除" in warning_calls[0].args[0]
+
+    def test_deletes_bear_event_when_reservation_missing(self, patched_env):
+        """対応するネット予約が無い枠でもテニスベアの募集は削除する"""
+        event = _ev(6, 13, 0, lesson=True, practice=False, court=BEAR_COURT)
+
+        with (
+            patch("netaichi.services.cancel.load_rules", return_value=CONF),
+            patch("netaichi.services.cancel.TennisBear") as tennis_bear_class,
+            patch("netaichi.services.cancel.NetAichi") as netaichi_class,
+            patch("netaichi.services.cancel.notify") as notify,
+        ):
+            tennis_bear = tennis_bear_class.return_value.__enter__.return_value
+            tennis_bear.list_organized_events.return_value = [event]
+            tennis_bear.delete_event.return_value = True
+            netaichi = netaichi_class.return_value.__enter__.return_value
+            netaichi.get.reservation.return_value = pd.DataFrame()
+
+            cancelled, warned = run(target_date=TARGET)
+
+        # 戻り値の cancelled には入れない（呼び出し側の件数表示が壊れない）
+        assert cancelled == []
+        assert warned == []
+        # ただし募集削除は実行する
+        tennis_bear.delete_event.assert_called_once_with(event["id"])
+        # コート取消APIはそもそも呼ばれない（予約が無いので）
+        netaichi.cancel_reservation.assert_not_called()
+
+    def test_held_notification_when_delete_fails(self, patched_env):
+        """募集削除に失敗したら held 側の通知経路（手動確認）に乗る"""
+        event = _ev(6, 13, 0, lesson=True, practice=False, court=BEAR_COURT)
+
+        with (
+            patch("netaichi.services.cancel.load_rules", return_value=CONF),
+            patch("netaichi.services.cancel.TennisBear") as tennis_bear_class,
+            patch("netaichi.services.cancel.NetAichi") as netaichi_class,
+            patch("netaichi.services.cancel.notify") as notify,
+        ):
+            tennis_bear = tennis_bear_class.return_value.__enter__.return_value
+            tennis_bear.list_organized_events.return_value = [event]
+            tennis_bear.delete_event.return_value = False  # 削除失敗
+            netaichi = netaichi_class.return_value.__enter__.return_value
+            netaichi.get.reservation.return_value = pd.DataFrame()
+
+            cancelled, warned = run(target_date=TARGET)
+
+        assert cancelled == []
+        tennis_bear.delete_event.assert_called_once_with(event["id"])
+        # 🚨「手動で確認してください」の通知が必ず出る
+        held_calls = [
+            c for c in notify.call_args_list
+            if "🚨" in c.args[0] and "手動で確認してください" in c.args[0]
+        ]
+        assert len(held_calls) == 1
+        # 消せていないので「募集を削除しました」とは言わない。
+        # 言ってしまうと held の通知と矛盾し、どちらが本当か読めなくなる
+        deleted_calls = [
+            c for c in notify.call_args_list if "募集を削除しました" in c.args[0]
+        ]
+        assert deleted_calls == []
+
+    def test_does_not_delete_on_dry_run(self, patched_env):
+        """execute=False のときは募集削除も走らせない"""
+        event = _ev(6, 13, 0, lesson=True, practice=False, court=BEAR_COURT)
+
+        with (
+            patch("netaichi.services.cancel.load_rules", return_value=CONF),
+            patch("netaichi.services.cancel.TennisBear") as tennis_bear_class,
+            patch("netaichi.services.cancel.NetAichi") as netaichi_class,
+            patch("netaichi.services.cancel.notify"),
+        ):
+            tennis_bear = tennis_bear_class.return_value.__enter__.return_value
+            tennis_bear.list_organized_events.return_value = [event]
+            netaichi = netaichi_class.return_value.__enter__.return_value
+            netaichi.get.reservation.return_value = pd.DataFrame()
+
+            run(target_date=TARGET, execute=False)
+
+        tennis_bear.delete_event.assert_not_called()
 
     def test_message_marks_master_only_judgement_when_single_account(
         self, patched_env_single,
@@ -153,6 +233,7 @@ class TestFindReservationUnmatched:
         ):
             tennis_bear = tennis_bear_class.return_value.__enter__.return_value
             tennis_bear.list_organized_events.return_value = [event]
+            tennis_bear.delete_event.return_value = True
             netaichi = netaichi_class.return_value.__enter__.return_value
             netaichi.get.reservation.return_value = pd.DataFrame()
 
@@ -177,6 +258,7 @@ class TestFindReservationUnmatched:
         ):
             tennis_bear = tennis_bear_class.return_value.__enter__.return_value
             tennis_bear.list_organized_events.return_value = [event]
+            tennis_bear.delete_event.return_value = True
             netaichi = netaichi_class.return_value.__enter__.return_value
             netaichi.get.reservation.return_value = pd.DataFrame()
 
@@ -269,6 +351,29 @@ class TestRecheckPath:
         assert "既にコート取消済みで募集だけ残っている可能性" in recheck_msgs[0]
         assert "予約が残っている可能性" in recheck_msgs[0]
         assert "前日に取り消せていなかった枠が見つかりました" not in recheck_msgs[0]
+
+    def test_recheck_deletes_bear_event_when_reservation_missing(self, patched_env):
+        """再確認パスでも対応するネット予約が無い枠の募集は削除する"""
+        event = _ev(6, 13, 0, lesson=True, practice=False, court=BEAR_COURT)
+
+        with (
+            patch("netaichi.services.cancel.load_rules", return_value=CONF),
+            patch("netaichi.services.cancel.TennisBear") as tennis_bear_class,
+            patch("netaichi.services.cancel.NetAichi") as netaichi_class,
+            patch("netaichi.services.cancel.notify"),
+        ):
+            tennis_bear = tennis_bear_class.return_value.__enter__.return_value
+            tennis_bear.list_organized_events.return_value = [event]
+            tennis_bear.delete_event.return_value = True
+            netaichi = netaichi_class.return_value.__enter__.return_value
+            netaichi.get.reservation.return_value = pd.DataFrame()
+
+            cancelled, warned = run(target_date=TARGET, is_recheck=True)
+
+        # 戻り値 cancelled には入れない
+        assert cancelled == []
+        # ただし募集削除は実行する
+        tennis_bear.delete_event.assert_called_once_with(event["id"])
 
     def test_recheck_success_uses_recovery_message(self, patched_env):
         """再確認で取消できた場合は通常成功と区別して回収を通知する"""

@@ -294,17 +294,25 @@ def format_unmatched_reservation_message(
     is_recheck: bool = False,
     single_account: bool = False,
 ) -> str:
-    """テニスベアの募集時間帯に該当するネットあいち予約が見つからなかった枠"""
+    """テニスベアの募集時間帯に該当するネットあいち予約が見つからなかった枠
+
+    ネットあいち側に予約が無い = 既に取消済み相当と判断し、テニスベアの募集は
+    削除済みである前提で通知する。ただし他名義などで予約が残っている可能性は
+    残るため、人間に確認してもらう主旨は残す
+    """
     if is_recheck:
         header = (
-            "⚠️ 再確認対象の募集に対応するネットあいち予約が見つかりません。"
+            "⚠️ 再確認対象の募集に対応するネットあいち予約が見つからないため、"
+            "テニスベアの募集を削除しました。"
             "既にコート取消済みで募集だけ残っている可能性と、"
             "他名義などで予約が残っている可能性があります。予約状況を確認してください"
         )
     else:
         header = (
-            "⚠️ 対応するネットあいちの予約が見つかりません。"
-            "既に消えているか、他名義で取られている可能性があります"
+            "⚠️ 対応するネットあいちの予約が見つからないため、"
+            "テニスベアの募集を削除しました。"
+            "コート取消済みか他名義で残っている可能性があるため、"
+            "予約状況を確認してください"
         )
     lines = [header]
     if single_account:
@@ -380,6 +388,9 @@ def run(
         post_cancel_failed: list[ReservationSlot] = []
         # 通知用に失敗ケースを収集する。再確認パスでは通常時と文言を切り替える
         cancel_reservation_failed: list[ReservationSlot] = []
+        # ネットあいち側に予約が無い（取消済み相当）枠。コート取消は要らないが、
+        # 募集だけ残ると参加者が申し込めてしまうので募集削除の対象にする。
+        # `cancelled` には混ぜない（コート取消に成功した枠、という意味を保つ）
         unmatched_reservation: list[dict] = []
         unmatched_court: list[dict] = []
         # 通知文に「マスターのみ判定」文言を添えるかどうかの判定に使う
@@ -402,7 +413,7 @@ def run(
                     reservation = find_reservation(ev, keyword, reservations, assigned)
                     if reservation is None:
                         na.logger.warning(
-                            f"対応するコート予約が見つからないためスキップ: "
+                            f"対応するコート予約が見つからないため募集のみ削除: "
                             f"{ev['date']:%Y-%m-%d} {ev['start']}時 {ev['court']}"
                         )
                         unmatched_reservation.append(ev)
@@ -518,11 +529,13 @@ def run(
                         else:
                             processing_failed.append(reservation)
 
-        # コート取消に成功した分だけテニスベアの募集も削除する。
+        # コート取消に成功した分に加え、ネットあいち側に予約が無い（取消済み相当）
+        # 枠の募集も削除対象にする。ネット取消が要らないだけで「中止と決まった募集」
+        # であることに変わりなく、残すと参加者が申し込んでしまうため。
         # 削除に失敗した場合（申込みが入った等）は保留にして別途通知する
         held = []
         if execute:
-            for ev in cancelled:
+            for ev in cancelled + unmatched_reservation:
                 try:
                     ok = tb.delete_event(ev["id"])
                 except Exception as e:
@@ -549,10 +562,14 @@ def run(
         notify(format_warning_message(warn_targets))
     if execute and cancel_reservation_failed:
         notify(format_cancel_failure_message(cancel_reservation_failed, is_recheck))
-    if execute and unmatched_reservation:
+    # 募集を消せた分だけ「削除しました」と伝える。消せなかった分は held の通知に任せる。
+    # 両方に載せると「削除しました」と「削除に失敗」が同時に並び、どちらが本当か読めない
+    held_ids = {ev["id"] for ev in held}
+    deleted_unmatched = [ev for ev in unmatched_reservation if ev["id"] not in held_ids]
+    if execute and deleted_unmatched:
         notify(
             format_unmatched_reservation_message(
-                unmatched_reservation,
+                deleted_unmatched,
                 is_recheck,
                 single_account,
             )
